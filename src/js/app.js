@@ -1,0 +1,369 @@
+// Инициализация Telegram Web App
+const tg = window.Telegram.WebApp;
+tg.expand();
+
+// Состояние приложения
+let state = {
+    products: [],
+    cart: [],
+    user: null,
+    balance: 0
+};
+
+// DOM элементы
+const elements = {
+    productsContainer: document.getElementById('products'),
+    cartItems: document.getElementById('cart-items'),
+    cartTotal: document.getElementById('cart-total'),
+    cartCount: document.getElementById('cart-count'),
+    starsCount: document.getElementById('stars-count'),
+    openCartBtn: document.getElementById('open-cart'),
+    closeCartBtn: document.getElementById('close-cart'),
+    cartSidebar: document.getElementById('cart-sidebar'),
+    checkoutBtn: document.getElementById('checkout-btn'),
+    categoryButtons: document.querySelectorAll('[data-category]')
+};
+
+// Инициализация приложения
+async function initApp() {
+    // Загрузка данных пользователя
+    await loadUserData();
+
+    // Загрузка товаров
+    await loadProducts();
+
+    // Загрузка корзины (если есть сохранённая)
+    loadCart();
+
+    // Обновление UI
+    updateUI();
+
+    // Настройка обработчиков событий
+    setupEventListeners();
+}
+
+// Загрузка данных пользователя
+async function loadUserData() {
+    try {
+        // В реальном приложении здесь будет запрос к вашему бэкенду
+        // Для демо используем mock данные
+        state.user = {
+            id: tg.initDataUnsafe.user?.id || 'demo_user',
+            name: tg.initDataUnsafe.user?.first_name || 'Гость'
+        };
+
+        state.balance = 150; // Mock баланс
+    } catch (error) {
+        console.error('Ошибка загрузки данных пользователя:', error);
+    }
+}
+
+// Загрузка товаров
+async function loadProducts() {
+    try {
+        // В реальном приложении здесь будет запрос к вашему бэкенду
+        // Mock данные для демонстрации
+        state.products = [
+            {
+                id: 1,
+                name: 'Кофе с собой',
+                description: 'Ароматный кофе на выбор',
+                price: 50,
+                category: 'popular',
+                image: 'https://via.placeholder.com/150?text=Coffee'
+            },
+            {
+                id: 2,
+                name: 'Книга',
+                description: 'Интересная книга в подарок',
+                price: 100,
+                category: 'popular',
+                image: 'https://via.placeholder.com/150?text=Book'
+            },
+            {
+                id: 3,
+                name: 'Билет в кино',
+                description: 'Билет на любой сеанс',
+                price: 120,
+                category: 'new',
+                image: 'https://via.placeholder.com/150?text=Cinema'
+            },
+            {
+                id: 4,
+                name: 'Цветы',
+                description: 'Красивый букет',
+                price: 200,
+                category: 'new',
+                image: 'https://via.placeholder.com/150?text=Flowers'
+            }
+        ];
+
+        renderProducts(state.products);
+    } catch (error) {
+        console.error('Ошибка загрузки товаров:', error);
+    }
+}
+
+// Отображение товаров
+function renderProducts(products) {
+    elements.productsContainer.innerHTML = '';
+
+    products.forEach(product => {
+        const productCard = document.createElement('div');
+        productCard.className = 'col';
+        productCard.innerHTML = `
+            <div class="card product-card h-100" data-id="${product.id}">
+                <img src="${product.image}" class="card-img-top" alt="${product.name}">
+                <div class="card-body">
+                    <h5 class="card-title">${product.name}</h5>
+                    <p class="card-text">${product.description}</p>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-primary">${product.price} ⭐</span>
+                        <button class="btn btn-sm btn-outline-primary add-to-cart">Добавить</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        elements.productsContainer.appendChild(productCard);
+    });
+}
+
+// Загрузка корзины из localStorage
+function loadCart() {
+    const savedCart = localStorage.getItem('marketplace_cart');
+    if (savedCart) {
+        state.cart = JSON.parse(savedCart);
+    }
+}
+
+// Сохранение корзины в localStorage
+function saveCart() {
+    localStorage.setItem('marketplace_cart', JSON.stringify(state.cart));
+}
+
+// Добавление товара в корзину
+function addToCart(productId) {
+    const product = state.products.find(p => p.id === productId);
+    if (!product) return;
+
+    const existingItem = state.cart.find(item => item.product.id === productId);
+
+    if (existingItem) {
+        existingItem.quantity += 1;
+    } else {
+        state.cart.push({
+            product,
+            quantity: 1
+        });
+    }
+
+    saveCart();
+    updateUI();
+    showAlert(`"${product.name}" добавлен в корзину`);
+}
+
+// Удаление товара из корзины
+function removeFromCart(productId) {
+    state.cart = state.cart.filter(item => item.product.id !== productId);
+    saveCart();
+    updateUI();
+}
+
+// Изменение количества товара в корзине
+function updateCartItemQuantity(productId, newQuantity) {
+    const item = state.cart.find(item => item.product.id === productId);
+    if (item) {
+        item.quantity = Math.max(1, newQuantity);
+        saveCart();
+        updateUI();
+    }
+}
+
+// Оформление заказа
+async function checkout() {
+    if (state.cart.length === 0) {
+        showAlert('Корзина пуста', 'warning');
+        return;
+    }
+
+    const total = getCartTotal();
+    if (total > state.balance) {
+        showAlert('Недостаточно звёзд для оформления заказа', 'error');
+        return;
+    }
+
+    try {
+        // В реальном приложении здесь будет запрос к вашему бэкенду
+        // Для демо просто очищаем корзину и уменьшаем баланс
+        state.balance -= total;
+        state.cart = [];
+        saveCart();
+
+        showAlert('Заказ успешно оформлен!', 'success');
+        updateUI();
+
+        // Закрываем корзину после оформления
+        toggleCart(false);
+
+        // Можно отправить данные в бота
+        if (tg.sendData) {
+            tg.sendData(JSON.stringify({
+                type: 'order_completed',
+                total: total,
+                balance: state.balance
+            }));
+        }
+    } catch (error) {
+        console.error('Ошибка оформления заказа:', error);
+        showAlert('Ошибка оформления заказа', 'error');
+    }
+}
+
+// Получение общей суммы корзины
+function getCartTotal() {
+    return state.cart.reduce((total, item) => total + (item.product.price * item.quantity), 0);
+}
+
+// Обновление UI
+function updateUI() {
+    // Обновление баланса
+    elements.starsCount.textContent = state.balance;
+
+    // Обновление корзины
+    renderCartItems();
+
+    // Обновление счётчика корзины
+    const totalItems = state.cart.reduce((sum, item) => sum + item.quantity, 0);
+    elements.cartCount.textContent = totalItems;
+
+    // Обновление общей суммы
+    elements.cartTotal.textContent = `${getCartTotal()} ⭐`;
+
+    // Блокировка кнопки оформления, если корзина пуста
+    elements.checkoutBtn.disabled = state.cart.length === 0;
+}
+
+// Отображение товаров в корзине
+function renderCartItems() {
+    elements.cartItems.innerHTML = '';
+
+    if (state.cart.length === 0) {
+        elements.cartItems.innerHTML = '<p class="text-muted">Корзина пуста</p>';
+        return;
+    }
+
+    state.cart.forEach(item => {
+        const cartItem = document.createElement('div');
+        cartItem.className = 'cart-item';
+        cartItem.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6>${item.product.name}</h6>
+                    <small class="text-muted">${item.product.price} ⭐ × ${item.quantity} = ${item.product.price * item.quantity} ⭐</small>
+                </div>
+                <div class="d-flex align-items-center">
+                    <div class="input-group input-group-sm me-2" style="width: 100px;">
+                        <button class="btn btn-outline-secondary minus-btn" type="button">-</button>
+                        <input type="number" class="form-control text-center quantity-input" value="${item.quantity}" min="1">
+                        <button class="btn btn-outline-secondary plus-btn" type="button">+</button>
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger remove-btn">✕</button>
+                </div>
+            </div>
+        `;
+
+        elements.cartItems.appendChild(cartItem);
+
+        // Настройка обработчиков для элементов корзины
+        const minusBtn = cartItem.querySelector('.minus-btn');
+        const plusBtn = cartItem.querySelector('.plus-btn');
+        const quantityInput = cartItem.querySelector('.quantity-input');
+        const removeBtn = cartItem.querySelector('.remove-btn');
+
+        minusBtn.addEventListener('click', () => {
+            const newQuantity = parseInt(quantityInput.value) - 1;
+            if (newQuantity >= 1) {
+                updateCartItemQuantity(item.product.id, newQuantity);
+            }
+        });
+
+        plusBtn.addEventListener('click', () => {
+            const newQuantity = parseInt(quantityInput.value) + 1;
+            updateCartItemQuantity(item.product.id, newQuantity);
+        });
+
+        quantityInput.addEventListener('change', () => {
+            const newQuantity = parseInt(quantityInput.value);
+            if (!isNaN(newQuantity) && newQuantity >= 1) {
+                updateCartItemQuantity(item.product.id, newQuantity);
+            }
+        });
+
+        removeBtn.addEventListener('click', () => {
+            removeFromCart(item.product.id);
+        });
+    });
+}
+
+// Управление отображением корзины
+function toggleCart(show) {
+    if (show) {
+        elements.cartSidebar.classList.add('open');
+        document.body.classList.add('no-scroll');
+    } else {
+        elements.cartSidebar.classList.remove('open');
+        document.body.classList.remove('no-scroll');
+    }
+}
+
+// Показ уведомлений
+function showAlert(message, type = 'success') {
+    // В реальном приложении можно использовать более красивый toast
+    alert(message);
+}
+
+// Настройка обработчиков событий
+function setupEventListeners() {
+    // Открытие/закрытие корзины
+    elements.openCartBtn.addEventListener('click', () => toggleCart(true));
+    elements.closeCartBtn.addEventListener('click', () => toggleCart(false));
+
+    // Оформление заказа
+    elements.checkoutBtn.addEventListener('click', checkout);
+
+    // Добавление товаров в корзину
+    elements.productsContainer.addEventListener('click', (e) => {
+        if (e.target.classList.contains('add-to-cart')) {
+            const productCard = e.target.closest('.product-card');
+            const productId = parseInt(productCard.dataset.id);
+            addToCart(productId);
+        }
+    });
+
+    // Фильтрация по категориям
+    elements.categoryButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            elements.categoryButtons.forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+
+            const category = button.dataset.category;
+            if (category === 'all') {
+                renderProducts(state.products);
+            } else {
+                const filtered = state.products.filter(p => p.category === category);
+                renderProducts(filtered);
+            }
+        });
+    });
+
+    // Обработка закрытия Web App
+    tg.onEvent('viewportChanged', () => {
+        if (tg.isExpanded) {
+            tg.enableClosingConfirmation();
+        }
+    });
+}
+
+// Запуск приложения
+document.addEventListener('DOMContentLoaded', initApp);
