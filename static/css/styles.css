@@ -30,9 +30,9 @@ body {
 }
 
 .product-card {
-    border: 1px solid #eee;
-    padding: 12px; /* Уменьшили внутренние границы */
-    margin: 10px;
+    border: 1px solid #ddd; /* Уменьшаем границу */
+    padding: 10px; /* Уменьшаем отступы */
+    margin: 8px; /* Уменьшаем внешний отступ */
 }
 
 .product-card:hover {
@@ -140,11 +140,10 @@ body {
 }
 
 .product-card img {
-    height: 300px; /* Увеличили высоту */
-    object-fit: cover;
-    width: 100%;
-    margin: 10px 0; /* Уменьшили отступы */
-    border-radius: 8px;
+    height: 350px; /* Увеличиваем высоту изображения */
+    width: 100%; /* Ширина на 100% */
+    object-fit: cover; /* Изображение будет обрезано, чтобы соответствовать размерам */
+    margin: 10px 0; /* Уменьшаем отступы вокруг изображения */
 }
 
 .quantity-input {

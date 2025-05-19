@@ -243,7 +243,7 @@ function renderCartItems() {
     // Добавляем обработчики после рендера
     document.querySelectorAll('.minus-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            const productId = parseInt(e.target.closest('.cart-item').dataset.id); // Исправлено получение ID
+            const productId = parseInt(e.target.closest('.cart-item').dataset.id);
             updateCartItemQuantity(productId, parseInt(e.target.nextElementSibling.value) - 1);
         });
     });
