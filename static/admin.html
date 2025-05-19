@@ -1,11 +1,67 @@
-<form id="product-form">
-    <input type="text" name="name" placeholder="Название" required>
-    <input type="number" name="price" placeholder="Цена" required>
-    <textarea name="description" placeholder="Описание"></textarea>
-    <select name="category">
-        <option value="popular">Популярные</option>
-        <option value="new">Новинки</option>
-    </select>
-    <input type="url" name="image" placeholder="URL изображения">
-    <button type="submit">Добавить товар</button>
-</form>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Админ-панель</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <div class="admin-panel">
+        <h2>Добавить товар</h2>
+        <form id="product-form">
+            <input type="text" name="name" placeholder="Название" required>
+            <input type="number" name="price" placeholder="Цена в звездах" required>
+            <textarea name="description" placeholder="Описание"></textarea>
+            <select name="category">
+                <option value="popular">Популярные</option>
+                <option value="new">Новинки</option>
+            </select>
+            <input type="url" name="image" placeholder="URL изображения" required>
+            <button type="submit">Добавить товар</button>
+        </form>
+        <div id="message"></div>
+    </div>
+
+    <script>
+        document.getElementById('product-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = {
+                name: e.target.name.value,
+                price: e.target.price.value,
+                description: e.target.description.value,
+                category: e.target.category.value,
+                image: e.target.image.value
+            };
+
+            try {
+                const response = await fetch('/api/products', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    document.getElementById('message').innerHTML = `
+                        <div class="alert alert-success mt-3">
+                            Товар "${result.product.name}" успешно добавлен!
+                        </div>
+                    `;
+                    e.target.reset();
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                document.getElementById('message').innerHTML = `
+                    <div class="alert alert-danger mt-3">
+                        Ошибка: ${error.message}
+                    </div>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -41,6 +41,26 @@ def js(filename):
 def index():
     return send_from_directory('static', 'index.html')
 
+@app.route('/admin.html')
+def admin_panel():
+    return send_from_directory('static', 'admin.html')
+
+@app.route('/api/products', methods=['POST'])
+def add_product():
+    try:
+        new_product = {
+            "id": len(products_db) + 1,
+            "name": request.json['name'],
+            "price": int(request.json['price']),
+            "description": request.json.get('description', ''),
+            "category": request.json.get('category', 'popular'),
+            "image": request.json.get('image', '')
+        }
+        products_db.append(new_product)
+        return jsonify({"status": "success", "product": new_product})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
 @app.route('/api/products')
 def get_products():
     return jsonify(products_db)
