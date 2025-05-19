@@ -45,59 +45,19 @@ async function initApp() {
 // Загрузка данных пользователя
 async function loadUserData() {
     try {
-        // В реальном приложении здесь будет запрос к вашему бэкенду
-        // Для демо используем mock данные
-        state.user = {
-            id: tg.initDataUnsafe.user?.id || 'demo_user',
-            name: tg.initDataUnsafe.user?.first_name || 'Гость'
-        };
-
-        state.balance = 150; // Mock баланс
+        const response = await fetch(`/api/user?user_id=${state.user.id}`);
+        const data = await response.json();
+        state.balance = data.balance;
     } catch (error) {
-        console.error('Ошибка загрузки данных пользователя:', error);
+        console.error('Ошибка загрузки данных:', error);
     }
 }
 
 // Загрузка товаров
 async function loadProducts() {
     try {
-        // В реальном приложении здесь будет запрос к вашему бэкенду
-        // Mock данные для демонстрации
-        state.products = [
-            {
-                id: 1,
-                name: 'Кофе с собой',
-                description: 'Ароматный кофе на выбор',
-                price: 50,
-                category: 'popular',
-                image: 'https://via.placeholder.com/150?text=Coffee'
-            },
-            {
-                id: 2,
-                name: 'Книга',
-                description: 'Интересная книга в подарок',
-                price: 100,
-                category: 'popular',
-                image: 'https://via.placeholder.com/150?text=Book'
-            },
-            {
-                id: 3,
-                name: 'Билет в кино',
-                description: 'Билет на любой сеанс',
-                price: 120,
-                category: 'new',
-                image: 'https://via.placeholder.com/150?text=Cinema'
-            },
-            {
-                id: 4,
-                name: 'Цветы',
-                description: 'Красивый букет',
-                price: 200,
-                category: 'new',
-                image: 'https://via.placeholder.com/150?text=Flowers'
-            }
-        ];
-
+        const response = await fetch('/api/products');
+        state.products = await response.json();
         renderProducts(state.products);
     } catch (error) {
         console.error('Ошибка загрузки товаров:', error);
@@ -182,41 +142,33 @@ function updateCartItemQuantity(productId, newQuantity) {
 
 // Оформление заказа
 async function checkout() {
-    if (state.cart.length === 0) {
-        showAlert('Корзина пуста', 'warning');
-        return;
-    }
-
-    const total = getCartTotal();
-    if (total > state.balance) {
-        showAlert('Недостаточно звёзд для оформления заказа', 'error');
-        return;
-    }
-
     try {
-        // В реальном приложении здесь будет запрос к вашему бэкенду
-        // Для демо просто очищаем корзину и уменьшаем баланс
-        state.balance -= total;
-        state.cart = [];
-        saveCart();
+        const response = await fetch('/api/checkout', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                user_id: state.user.id,
+                cart: state.cart.map(item => ({
+                    product: { id: item.product.id, price: item.product.price },
+                    quantity: item.quantity
+                }))
+            })
+        });
 
-        showAlert('Заказ успешно оформлен!', 'success');
-        updateUI();
+        const result = await response.json();
 
-        // Закрываем корзину после оформления
-        toggleCart(false);
-
-        // Можно отправить данные в бота
-        if (tg.sendData) {
-            tg.sendData(JSON.stringify({
-                type: 'order_completed',
-                total: total,
-                balance: state.balance
-            }));
+        if (result.status === 'success') {
+            state.balance = result.new_balance;
+            state.cart = [];
+            saveCart();
+            showAlert('Заказ успешен! Новый баланс: ' + result.new_balance + ' ⭐', 'success');
+            tg.close();
+        } else {
+            showAlert(result.message, 'error');
         }
     } catch (error) {
-        console.error('Ошибка оформления заказа:', error);
-        showAlert('Ошибка оформления заказа', 'error');
+        console.error('Ошибка:', error);
+        showAlert('Ошибка соединения', 'error');
     }
 }
 

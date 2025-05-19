@@ -7,60 +7,78 @@ from telegram.ext import (
     ContextTypes,
     MessageHandler,
     filters,
+    CallbackContext,
 )
+from flask import Flask, jsonify, request
 
-# Настройка логирования
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+# Инициализация Flask
+app = Flask(__name__)
 
-# Токен вашего бота (РЕКОМЕНДУЕТСЯ использовать os.environ или .env файл)
+# Mock база данных
+users_db = {"demo_user": {"balance": 150}}
+products_db = [
+    {
+        "id": 1,
+        "name": "Кофе",
+        "price": 50,
+        "category": "popular",
+        "description": "Ароматный кофе на выбор",
+        "image": "https://via.placeholder.com/150?text=Coffee"
+    }
+]
+
+
+# Flask Endpoints
+@app.route('/api/products')
+def get_products():
+    return jsonify(products_db)
+
+
+@app.route('/api/user')
+def get_user():
+    user_id = request.args.get('user_id')
+    return jsonify(users_db.get(user_id, {}))
+
+
+@app.route('/api/checkout', methods=['POST'])
+def checkout():
+    data = request.json
+    user = users_db.get(data['user_id'])
+
+    total = sum(item['product']['price'] * item['quantity'] for item in data['cart'])
+
+    if user['balance'] >= total:
+        user['balance'] -= total
+        return jsonify({"status": "success", "new_balance": user['balance']})
+    else:
+        return jsonify({"status": "error", "message": "Недостаточно средств"}), 400
+
+
+# Telegram Bot
 TOKEN = "7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY"
-
-# URL вашего Web App
 WEB_APP_URL = "https://your-bot-market.vercel.app/"
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Отправляет сообщение с кнопкой для открытия Web App."""
     keyboard = InlineKeyboardMarkup([[
         InlineKeyboardButton(
             text="🎁 Открыть маркетплейс",
-            web_app=WebAppInfo(url=WEB_APP_URL)
-        )
+            web_app=WebAppInfo(url=WEB_APP_URL))
     ]])
-    await update.message.reply_text(
-        "Добро пожаловать в маркетплейс подарков!",
-        reply_markup=keyboard
-    )
+    await update.message.reply_text("Добро пожаловать!", reply_markup=keyboard)
 
-async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обрабатывает данные, полученные из Web App."""
-    try:
-        data = json.loads(update.effective_message.web_app_data.data)
-        logger.info(f"Получены данные из Web App: {data}")
 
-        if data.get("type") == "order_completed":
-            await update.effective_message.reply_text(
-                f"🎉 Заказ на {data['total']} звёзд успешно оформлен!\n"
-                f"Остаток на счету: {data['balance']} ⭐"
-            )
-    except Exception as e:
-        logger.error(f"Ошибка обработки Web App данных: {e}")
-        await update.effective_message.reply_text("Произошла ошибка при обработке данных.")
-
-def main() -> None:
-    """Запуск бота."""
+def run_bot():
     application = Application.builder().token(TOKEN).build()
-
-    # Обработчики команд
     application.add_handler(CommandHandler("start", start))
-
-    # Обработчик данных из Web App
-    application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
-
-    # Запуск бота
     application.run_polling()
 
-if __name__ == "__main__":
-    main()
+
+if __name__ == '__main__':
+    # Запуск Flask в отдельном потоке
+    from threading import Thread
+
+    Thread(target=app.run, kwargs={'port': 5000}).start()
+
+    # Запуск Telegram бота
+    run_bot()
