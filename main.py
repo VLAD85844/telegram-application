@@ -22,7 +22,7 @@ products_db = []
 # Конфигурация Telegram
 TOKEN = "7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY"
 WEB_APP_URL = "https://telegram-application-u3g4.vercel.app/"
-
+ADMIN_URL = "https://telegram-application-u3g4.vercel.app/static/admin.html"
 
 @app.route('/')
 def serve_index():
@@ -92,14 +92,25 @@ def checkout():
 # Telegram Bot Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    users_db[str(user.id)] = {"balance": 1000}  # Инициализация баланса
+    users_db[str(user.id)] = {"balance": 1000}  # Инициализация баланса для пользователя
 
-    keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton(
-            text="🎁 Открыть магазин",
-            web_app=WebAppInfo(url=WEB_APP_URL))
-    ]])
+    # Создаем клавиатуру с двумя кнопками: для магазина и админки
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(
+                text="🎁 Открыть магазин",
+                web_app=WebAppInfo(url=WEB_APP_URL)  # Ссылка на магазин
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🛠 Открыть админку",
+                web_app=WebAppInfo(url=ADMIN_URL)  # Ссылка на админку
+            )
+        ]
+    ])
 
+    # Отправляем сообщение с клавиатурой
     await update.message.reply_text(
         f"Ваш баланс: {users_db[str(user.id)]['balance']} ⭐",
         reply_markup=keyboard
@@ -109,11 +120,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def run_bot():
     application = Application.builder().token(TOKEN).build()
     application.add_handler(CommandHandler("start", start))
-    application.run_polling()
+    application.run_polling()  # Запуск бота
 
 
 if __name__ == '__main__':
     from threading import Thread
 
+    # Запуск Flask сервера в отдельном потоке
     Thread(target=app.run, kwargs={'host': '0.0.0.0', 'port': 5000}).start()
+
+    # Запуск бота
     run_bot()
