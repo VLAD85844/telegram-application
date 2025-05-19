@@ -65,3 +65,31 @@
     </script>
 </body>
 </html>
+
+
+<div class="product-list mt-4">
+    <h3>Список товаров</h3>
+    <div id="products-list"></div>
+</div>
+
+<script>
+    // JavaScript для загрузки и удаления товаров
+    async function loadProducts() {
+        const response = await fetch('/api/products');
+        const products = await response.json();
+        const list = document.getElementById('products-list');
+        list.innerHTML = products.map(p => `
+            <div class="product-item mb-3">
+                <div>${p.name} (${p.price} ⭐)</div>
+                <button onclick="deleteProduct(${p.id})" class="btn btn-sm btn-danger">Удалить</button>
+            </div>
+        `).join('');
+    }
+
+    async function deleteProduct(id) {
+        await fetch(`/api/products/${id}`, { method: 'DELETE' });
+        loadProducts();
+    }
+
+    loadProducts(); // Загрузить при открытии
+</script>

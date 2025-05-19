@@ -142,24 +142,22 @@ async function getStarsPrice(quantity) {
 async function initPaymentFlow() {
     const neededStars = getCartTotal();
 
-    const priceInfo = await getStarsPrice(neededStars);
-    if (!priceInfo) {
-        showAlert('Ошибка получения цены', 'error');
-        return;
-    }
+    try {
+        const response = await tg.sendInvoice({
+            title: "Оплата товаров",
+            description: `Покупка на ${neededStars} звезд`,
+            payload: JSON.stringify(state.cart),
+            currency: "XTR",
+            prices: [{ label: "Итого", amount: neededStars * 100 }] // В копейках
+        });
 
-    const wallet = await generateWallet();
-    if (!wallet) {
-        showAlert('Ошибка создания кошелька', 'error');
-        return;
+        tg.onEvent('invoiceClosed', ({ status }) => {
+            if (status === 'paid') completeOrder();
+            else showAlert('Оплата отменена', 'error');
+        });
+    } catch (error) {
+        showAlert('Ошибка оплаты: ' + error.message, 'error');
     }
-
-    showPaymentDialog({
-        stars: neededStars,
-        tonAmount: priceInfo.tonvalue,
-        usdAmount: priceInfo.usdvalue,
-        wallet: wallet.non_bounceableaddress
-    });
 }
 
 function showPaymentDialog(data) {
@@ -245,14 +243,14 @@ function renderCartItems() {
     // Добавляем обработчики после рендера
     document.querySelectorAll('.minus-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            const productId = parseInt(e.target.closest('.cart-item').parentElement.dataset.id);
+            const productId = parseInt(e.target.closest('.cart-item').dataset.id); // Исправлено получение ID
             updateCartItemQuantity(productId, parseInt(e.target.nextElementSibling.value) - 1);
         });
     });
 
     document.querySelectorAll('.plus-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            const productId = parseInt(e.target.closest('.cart-item').parentElement.dataset.id);
+            const productId = parseInt(e.target.closest('.cart-item').dataset.id);
             updateCartItemQuantity(productId, parseInt(e.target.previousElementSibling.value) + 1);
         });
     });

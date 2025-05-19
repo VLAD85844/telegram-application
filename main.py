@@ -61,10 +61,21 @@ def add_product():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
 
+@app.route('/api/products/<int:product_id>', methods=['DELETE'])
+def delete_product(product_id):
+    global products_db
+    products_db = [p for p in products_db if p['id'] != product_id]
+    return jsonify({"status": "success"})
+
 @app.route('/api/products')
 def get_products():
     return jsonify(products_db)
 
+@app.route('/api/payment', methods=['POST'])
+def handle_payment():
+    data = request.json
+    # Логика проверки платежа через Telegram API
+    return jsonify({"status": "success"})
 
 @app.route('/api/user')
 def get_user():

@@ -30,8 +30,9 @@ body {
 }
 
 .product-card {
-    transition: transform 0.2s;
-    cursor: pointer;
+    border: 1px solid #eee;
+    padding: 12px; /* Уменьшили внутренние границы */
+    margin: 10px;
 }
 
 .product-card:hover {
@@ -139,9 +140,11 @@ body {
 }
 
 .product-card img {
-    height: 20px;
+    height: 300px; /* Увеличили высоту */
     object-fit: cover;
-    width: 10%;
+    width: 100%;
+    margin: 10px 0; /* Уменьшили отступы */
+    border-radius: 8px;
 }
 
 .quantity-input {
