@@ -139,9 +139,9 @@ body {
 }
 
 .product-card img {
-    height: 200px;
+    height: 20px;
     object-fit: cover;
-    width: 100%;
+    width: 10%;
 }
 
 .quantity-input {
