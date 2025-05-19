@@ -241,6 +241,35 @@ function renderCartItems() {
                 </div>
             </div>
         `).join('');
+
+    // Добавляем обработчики после рендера
+    document.querySelectorAll('.minus-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const productId = parseInt(e.target.closest('.cart-item').parentElement.dataset.id);
+            updateCartItemQuantity(productId, parseInt(e.target.nextElementSibling.value) - 1);
+        });
+    });
+
+    document.querySelectorAll('.plus-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const productId = parseInt(e.target.closest('.cart-item').parentElement.dataset.id);
+            updateCartItemQuantity(productId, parseInt(e.target.previousElementSibling.value) + 1);
+        });
+    });
+
+    document.querySelectorAll('.remove-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const productId = parseInt(e.target.closest('.cart-item').parentElement.dataset.id);
+            removeFromCart(productId);
+        });
+    });
+
+    document.querySelectorAll('.quantity-input').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const productId = parseInt(e.target.closest('.cart-item').parentElement.dataset.id);
+            updateCartItemQuantity(productId, parseInt(e.target.value));
+        });
+    });
 }
 
 // Обработчики событий

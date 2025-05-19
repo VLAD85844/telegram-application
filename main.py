@@ -21,8 +21,8 @@ products_db = []
 
 # Конфигурация Telegram
 TOKEN = "7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY"
-WEB_APP_URL = "https://telegram-application-u3g4.vercel.app/"
-ADMIN_URL = "https://telegram-application-u3g4.vercel.app/static/admin.html"
+WEB_APP_URL = "https://telegram-application-vlads-projects-09d1df59.vercel.app/"
+ADMIN_URL = "https://telegram-application-vlads-projects-09d1df59.vercel.app/admin.html"
 
 @app.route('/')
 def serve_index():

@@ -137,3 +137,18 @@ body {
     color: #721c24;
     border: 1px solid #f5c6cb;
 }
+
+.product-card img {
+    height: 200px;
+    object-fit: cover;
+    width: 100%;
+}
+
+.quantity-input {
+    width: 50px;
+    text-align: center;
+}
+
+.input-group {
+    flex-wrap: nowrap;
+}
