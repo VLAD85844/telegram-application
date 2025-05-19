@@ -87,8 +87,17 @@
     }
 
     async function deleteProduct(id) {
+        // Удаление товара из админки
         await fetch(`/api/products/${id}`, { method: 'DELETE' });
+
+        // Удаление товара из корзины, если он там есть
+        const cart = JSON.parse(localStorage.getItem('marketplace_cart')) || [];
+        const updatedCart = cart.filter(item => item.product.id !== id);
+        localStorage.setItem('marketplace_cart', JSON.stringify(updatedCart));
+
+        // Обновляем интерфейс с товаром и корзиной
         loadProducts();
+        updateUI(); // Обновляем интерфейс корзины
     }
 
     loadProducts(); // Загрузить при открытии

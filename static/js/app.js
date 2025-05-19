@@ -103,16 +103,18 @@ function addToCart(productId) {
     showAlert(`"${product.name}" добавлен в корзину`);
 }
 
+// Удаление товара из корзины
 function removeFromCart(productId) {
     state.cart = state.cart.filter(item => item.product.id !== productId);
     saveCart();
     updateUI();
 }
 
+// Обновление количества товара в корзине
 function updateCartItemQuantity(productId, newQuantity) {
     const item = state.cart.find(item => item.product.id === productId);
     if (item) {
-        item.quantity = Math.max(1, newQuantity);
+        item.quantity = Math.max(1, newQuantity); // Ограничиваем минимальное количество единицей
         saveCart();
         updateUI();
     }
@@ -222,7 +224,7 @@ function renderCartItems() {
     elements.cartItems.innerHTML = state.cart.length === 0
         ? '<p class="text-muted">Корзина пуста</p>'
         : state.cart.map(item => `
-            <div class="cart-item">
+            <div class="cart-item" data-id="${item.product.id}">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <h6>${item.product.name}</h6>
@@ -240,7 +242,7 @@ function renderCartItems() {
             </div>
         `).join('');
 
-    // Добавляем обработчики после рендера
+    // Добавляем обработчики для кнопок минус, плюс и удалить
     document.querySelectorAll('.minus-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const productId = parseInt(e.target.closest('.cart-item').dataset.id);
@@ -257,14 +259,14 @@ function renderCartItems() {
 
     document.querySelectorAll('.remove-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            const productId = parseInt(e.target.closest('.cart-item').parentElement.dataset.id);
+            const productId = parseInt(e.target.closest('.cart-item').dataset.id);
             removeFromCart(productId);
         });
     });
 
     document.querySelectorAll('.quantity-input').forEach(input => {
         input.addEventListener('change', (e) => {
-            const productId = parseInt(e.target.closest('.cart-item').parentElement.dataset.id);
+            const productId = parseInt(e.target.closest('.cart-item').dataset.id);
             updateCartItemQuantity(productId, parseInt(e.target.value));
         });
     });
