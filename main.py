@@ -21,13 +21,25 @@ products_db = []
 
 # Конфигурация Telegram
 TOKEN = "7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY"
-WEB_APP_URL = "https://telegram-application-m4nk.vercel.app/"
+WEB_APP_URL = "https://telegram-application-u3g4.vercel.app/"
 
 
 @app.route('/')
 def serve_index():
     return send_from_directory('static', 'index.html')
 
+
+@app.route('/css/<path:filename>')
+def css(filename):
+    return send_from_directory('static/css', filename)
+
+@app.route('/js/<path:filename>')
+def js(filename):
+    return send_from_directory('static/js', filename)
+
+@app.route('/')
+def index():
+    return send_from_directory('static', 'index.html')
 
 @app.route('/api/products')
 def get_products():

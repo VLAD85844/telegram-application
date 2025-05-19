@@ -2,46 +2,16 @@
 const tg = window.Telegram.WebApp;
 tg.expand();
 
-// Состояние пользователя
+// Конфигурация API
+const STARS_API = "http://139.99.39.26:6555/api";
+
+// Состояние приложения
 let state = {
-    user: {
-        id: tg.initDataUnsafe.user.id,
-        balance: 0
-    },
+    products: [],
     cart: [],
-    products: []
+    user: null,
+    balance: 0
 };
-
-// Загрузка данных
-async function initApp() {
-    await loadUserData();
-    await loadProducts();
-    loadCart();
-    updateUI();
-    setupEventListeners();
-}
-
-// Интеграция с Telegram Payments
-async function checkout() {
-    const total = getCartTotal();
-
-    const invoice = {
-        title: "Оплата заказа",
-        description: `Товаров: ${state.cart.length}`,
-        currency: "XTR",
-        prices: [{ label: "Total", amount: total * 100 }], // В копейках
-        payload: JSON.stringify(state.cart)
-    };
-
-    tg.sendInvoice(invoice, (status) => {
-        if (status === "paid") {
-            state.cart = [];
-            saveCart();
-            updateUI();
-            tg.close();
-        }
-    });
-}
 
 // DOM элементы
 const elements = {
@@ -59,19 +29,10 @@ const elements = {
 
 // Инициализация приложения
 async function initApp() {
-    // Загрузка данных пользователя
     await loadUserData();
-
-    // Загрузка товаров
     await loadProducts();
-
-    // Загрузка корзины (если есть сохранённая)
     loadCart();
-
-    // Обновление UI
     updateUI();
-
-    // Настройка обработчиков событий
     setupEventListeners();
 }
 
@@ -100,7 +61,6 @@ async function loadProducts() {
 // Отображение товаров
 function renderProducts(products) {
     elements.productsContainer.innerHTML = '';
-
     products.forEach(product => {
         const productCard = document.createElement('div');
         productCard.className = 'col';
@@ -117,53 +77,38 @@ function renderProducts(products) {
                 </div>
             </div>
         `;
-
         elements.productsContainer.appendChild(productCard);
     });
 }
 
-// Загрузка корзины из localStorage
+// Работа с корзиной
 function loadCart() {
     const savedCart = localStorage.getItem('marketplace_cart');
-    if (savedCart) {
-        state.cart = JSON.parse(savedCart);
-    }
+    if (savedCart) state.cart = JSON.parse(savedCart);
 }
 
-// Сохранение корзины в localStorage
 function saveCart() {
     localStorage.setItem('marketplace_cart', JSON.stringify(state.cart));
 }
 
-// Добавление товара в корзину
 function addToCart(productId) {
     const product = state.products.find(p => p.id === productId);
     if (!product) return;
 
     const existingItem = state.cart.find(item => item.product.id === productId);
-
-    if (existingItem) {
-        existingItem.quantity += 1;
-    } else {
-        state.cart.push({
-            product,
-            quantity: 1
-        });
-    }
+    existingItem ? existingItem.quantity++ : state.cart.push({ product, quantity: 1 });
 
     saveCart();
     updateUI();
     showAlert(`"${product.name}" добавлен в корзину`);
 }
 
-// Удаление товара из корзины
 function removeFromCart(productId) {
     state.cart = state.cart.filter(item => item.product.id !== productId);
     saveCart();
     updateUI();
 }
 
-// Изменение количества товара в корзине
 function updateCartItemQuantity(productId, newQuantity) {
     const item = state.cart.find(item => item.product.id === productId);
     if (item) {
@@ -173,181 +118,167 @@ function updateCartItemQuantity(productId, newQuantity) {
     }
 }
 
-// Оформление заказа
-async function checkout() {
+// Платежная система
+async function generateWallet() {
     try {
-        const response = await fetch('/api/checkout', {
+        const response = await fetch(`${STARS_API}/ton/generate`);
+        return await response.json();
+    } catch (error) {
+        console.error('Ошибка генерации кошелька:', error);
+        return null;
+    }
+}
+
+async function getStarsPrice(quantity) {
+    try {
+        const response = await fetch(`${STARS_API}/stars/price/${quantity}`);
+        return await response.json();
+    } catch (error) {
+        console.error('Ошибка получения цены:', error);
+        return null;
+    }
+}
+
+async function initPaymentFlow() {
+    const neededStars = getCartTotal();
+
+    const priceInfo = await getStarsPrice(neededStars);
+    if (!priceInfo) {
+        showAlert('Ошибка получения цены', 'error');
+        return;
+    }
+
+    const wallet = await generateWallet();
+    if (!wallet) {
+        showAlert('Ошибка создания кошелька', 'error');
+        return;
+    }
+
+    showPaymentDialog({
+        stars: neededStars,
+        tonAmount: priceInfo.tonvalue,
+        usdAmount: priceInfo.usdvalue,
+        wallet: wallet.non_bounceableaddress
+    });
+}
+
+function showPaymentDialog(data) {
+    const dialogHTML = `
+        <div class="payment-dialog">
+            <h3>Оплата ${data.stars} ⭐</h3>
+            <p>Сумма: ${data.tonAmount} TON ($${data.usdAmount})</p>
+            <p>Кошелек для оплаты: <code>${data.wallet}</code></p>
+            <button id="confirm-payment" class="btn btn-success">Я оплатил</button>
+        </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', dialogHTML);
+
+    document.getElementById('confirm-payment').addEventListener('click', async () => {
+        await checkPaymentStatus(data.wallet);
+    });
+}
+
+async function checkPaymentStatus(wallet) {
+    try {
+        const response = await fetch(`${STARS_API}/stars/check-payment`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                user_id: state.user.id,
-                cart: state.cart.map(item => ({
-                    product: { id: item.product.id, price: item.product.price },
-                    quantity: item.quantity
-                }))
-            })
+            body: JSON.stringify({ address: wallet })
         });
 
         const result = await response.json();
 
-        if (result.status === 'success') {
-            state.balance = result.new_balance;
-            state.cart = [];
-            saveCart();
-            showAlert('Заказ успешен! Новый баланс: ' + result.new_balance + ' ⭐', 'success');
-            tg.close();
+        if (result.status === 'confirmed') {
+            completeOrder();
         } else {
-            showAlert(result.message, 'error');
+            showAlert('Платеж не обнаружен', 'warning');
         }
     } catch (error) {
-        console.error('Ошибка:', error);
-        showAlert('Ошибка соединения', 'error');
+        console.error('Ошибка проверки платежа:', error);
     }
 }
 
-// Получение общей суммы корзины
+function completeOrder() {
+    state.cart = [];
+    saveCart();
+    updateUI();
+    showAlert('Оплата успешно завершена!', 'success');
+    tg.close();
+}
+
+// Обновление интерфейса
 function getCartTotal() {
     return state.cart.reduce((total, item) => total + (item.product.price * item.quantity), 0);
 }
 
-// Обновление UI
 function updateUI() {
-    // Обновление баланса
     elements.starsCount.textContent = state.balance;
-
-    // Обновление корзины
     renderCartItems();
-
-    // Обновление счётчика корзины
-    const totalItems = state.cart.reduce((sum, item) => sum + item.quantity, 0);
-    elements.cartCount.textContent = totalItems;
-
-    // Обновление общей суммы
+    elements.cartCount.textContent = state.cart.reduce((sum, item) => sum + item.quantity, 0);
     elements.cartTotal.textContent = `${getCartTotal()} ⭐`;
-
-    // Блокировка кнопки оформления, если корзина пуста
     elements.checkoutBtn.disabled = state.cart.length === 0;
 }
 
-// Отображение товаров в корзине
 function renderCartItems() {
-    elements.cartItems.innerHTML = '';
-
-    if (state.cart.length === 0) {
-        elements.cartItems.innerHTML = '<p class="text-muted">Корзина пуста</p>';
-        return;
-    }
-
-    state.cart.forEach(item => {
-        const cartItem = document.createElement('div');
-        cartItem.className = 'cart-item';
-        cartItem.innerHTML = `
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h6>${item.product.name}</h6>
-                    <small class="text-muted">${item.product.price} ⭐ × ${item.quantity} = ${item.product.price * item.quantity} ⭐</small>
-                </div>
-                <div class="d-flex align-items-center">
-                    <div class="input-group input-group-sm me-2" style="width: 100px;">
-                        <button class="btn btn-outline-secondary minus-btn" type="button">-</button>
-                        <input type="number" class="form-control text-center quantity-input" value="${item.quantity}" min="1">
-                        <button class="btn btn-outline-secondary plus-btn" type="button">+</button>
+    elements.cartItems.innerHTML = state.cart.length === 0
+        ? '<p class="text-muted">Корзина пуста</p>'
+        : state.cart.map(item => `
+            <div class="cart-item">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6>${item.product.name}</h6>
+                        <small class="text-muted">${item.product.price} ⭐ × ${item.quantity} = ${item.product.price * item.quantity} ⭐</small>
                     </div>
-                    <button class="btn btn-sm btn-outline-danger remove-btn">✕</button>
+                    <div class="d-flex align-items-center">
+                        <div class="input-group input-group-sm me-2" style="width: 100px;">
+                            <button class="btn btn-outline-secondary minus-btn">-</button>
+                            <input type="number" class="form-control text-center quantity-input" value="${item.quantity}" min="1">
+                            <button class="btn btn-outline-secondary plus-btn">+</button>
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger remove-btn">✕</button>
+                    </div>
                 </div>
             </div>
-        `;
-
-        elements.cartItems.appendChild(cartItem);
-
-        // Настройка обработчиков для элементов корзины
-        const minusBtn = cartItem.querySelector('.minus-btn');
-        const plusBtn = cartItem.querySelector('.plus-btn');
-        const quantityInput = cartItem.querySelector('.quantity-input');
-        const removeBtn = cartItem.querySelector('.remove-btn');
-
-        minusBtn.addEventListener('click', () => {
-            const newQuantity = parseInt(quantityInput.value) - 1;
-            if (newQuantity >= 1) {
-                updateCartItemQuantity(item.product.id, newQuantity);
-            }
-        });
-
-        plusBtn.addEventListener('click', () => {
-            const newQuantity = parseInt(quantityInput.value) + 1;
-            updateCartItemQuantity(item.product.id, newQuantity);
-        });
-
-        quantityInput.addEventListener('change', () => {
-            const newQuantity = parseInt(quantityInput.value);
-            if (!isNaN(newQuantity) && newQuantity >= 1) {
-                updateCartItemQuantity(item.product.id, newQuantity);
-            }
-        });
-
-        removeBtn.addEventListener('click', () => {
-            removeFromCart(item.product.id);
-        });
-    });
+        `).join('');
 }
 
-// Управление отображением корзины
-function toggleCart(show) {
-    if (show) {
-        elements.cartSidebar.classList.add('open');
-        document.body.classList.add('no-scroll');
-    } else {
-        elements.cartSidebar.classList.remove('open');
-        document.body.classList.remove('no-scroll');
-    }
-}
-
-// Показ уведомлений
-function showAlert(message, type = 'success') {
-    // В реальном приложении можно использовать более красивый toast
-    alert(message);
-}
-
-// Настройка обработчиков событий
+// Обработчики событий
 function setupEventListeners() {
-    // Открытие/закрытие корзины
+    document.addEventListener('click', (e) => {
+        if (e.target.classList.contains('add-to-cart')) {
+            const productId = parseInt(e.target.closest('.product-card').dataset.id);
+            addToCart(productId);
+        }
+
+        if (e.target.id === 'checkout-btn') initPaymentFlow();
+    });
+
     elements.openCartBtn.addEventListener('click', () => toggleCart(true));
     elements.closeCartBtn.addEventListener('click', () => toggleCart(false));
 
-    // Оформление заказа
-    elements.checkoutBtn.addEventListener('click', checkout);
-
-    // Добавление товаров в корзину
-    elements.productsContainer.addEventListener('click', (e) => {
-        if (e.target.classList.contains('add-to-cart')) {
-            const productCard = e.target.closest('.product-card');
-            const productId = parseInt(productCard.dataset.id);
-            addToCart(productId);
-        }
-    });
-
-    // Фильтрация по категориям
     elements.categoryButtons.forEach(button => {
         button.addEventListener('click', () => {
             elements.categoryButtons.forEach(btn => btn.classList.remove('active'));
             button.classList.add('active');
-
-            const category = button.dataset.category;
-            if (category === 'all') {
-                renderProducts(state.products);
-            } else {
-                const filtered = state.products.filter(p => p.category === category);
-                renderProducts(filtered);
-            }
+            const filtered = button.dataset.category === 'all'
+                ? state.products
+                : state.products.filter(p => p.category === button.dataset.category);
+            renderProducts(filtered);
         });
     });
 
-    // Обработка закрытия Web App
-    tg.onEvent('viewportChanged', () => {
-        if (tg.isExpanded) {
-            tg.enableClosingConfirmation();
-        }
-    });
+    tg.onEvent('viewportChanged', () => tg.isExpanded && tg.enableClosingConfirmation());
+}
+
+// Вспомогательные функции
+function toggleCart(show) {
+    elements.cartSidebar.classList.toggle('open', show);
+    document.body.classList.toggle('no-scroll', show);
+}
+
+function showAlert(message, type = 'success') {
+    alert(`[${type.toUpperCase()}] ${message}`);
 }
 
 // Запуск приложения
