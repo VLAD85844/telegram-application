@@ -1,5 +1,7 @@
 import logging
 import json
+from flask import Flask, jsonify, request, send_from_directory
+from flask_cors import CORS
 from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -9,26 +11,24 @@ from telegram.ext import (
     filters,
     CallbackContext,
 )
-from flask import Flask, jsonify, request
 
-# Инициализация Flask
 app = Flask(__name__)
+CORS(app)  # Разрешаем CORS
 
-# Mock база данных
-users_db = {"demo_user": {"balance": 150}}
-products_db = [
-    {
-        "id": 1,
-        "name": "Кофе",
-        "price": 50,
-        "category": "popular",
-        "description": "Ароматный кофе на выбор",
-        "image": "https://via.placeholder.com/150?text=Coffee"
-    }
-]
+# База данных
+users_db = {}
+products_db = []
+
+# Конфигурация Telegram
+TOKEN = "7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY"
+WEB_APP_URL = "https://telegram-application-m4nk.vercel.app/"
 
 
-# Flask Endpoints
+@app.route('/')
+def serve_index():
+    return send_from_directory('static', 'index.html')
+
+
 @app.route('/api/products')
 def get_products():
     return jsonify(products_db)
@@ -37,35 +37,41 @@ def get_products():
 @app.route('/api/user')
 def get_user():
     user_id = request.args.get('user_id')
-    return jsonify(users_db.get(user_id, {}))
+    return jsonify(users_db.get(user_id, {"balance": 0}))
 
 
 @app.route('/api/checkout', methods=['POST'])
 def checkout():
     data = request.json
-    user = users_db.get(data['user_id'])
+    user_id = data['user_id']
 
-    total = sum(item['product']['price'] * item['quantity'] for item in data['cart'])
+    if user_id not in users_db:
+        return jsonify({"status": "error", "message": "User not found"}), 404
 
-    if user['balance'] >= total:
-        user['balance'] -= total
-        return jsonify({"status": "success", "new_balance": user['balance']})
+    total = sum(item['price'] * item['quantity'] for item in data['cart'])
+
+    if users_db[user_id]['balance'] >= total:
+        users_db[user_id]['balance'] -= total
+        return jsonify({"status": "success", "new_balance": users_db[user_id]['balance']})
     else:
         return jsonify({"status": "error", "message": "Недостаточно средств"}), 400
 
 
-# Telegram Bot
-TOKEN = "7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY"
-WEB_APP_URL = "https://your-bot-market.vercel.app/"
+# Telegram Bot Handlers
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    users_db[str(user.id)] = {"balance": 1000}  # Инициализация баланса
 
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = InlineKeyboardMarkup([[
         InlineKeyboardButton(
-            text="🎁 Открыть маркетплейс",
+            text="🎁 Открыть магазин",
             web_app=WebAppInfo(url=WEB_APP_URL))
     ]])
-    await update.message.reply_text("Добро пожаловать!", reply_markup=keyboard)
+
+    await update.message.reply_text(
+        f"Ваш баланс: {users_db[str(user.id)]['balance']} ⭐",
+        reply_markup=keyboard
+    )
 
 
 def run_bot():
@@ -75,10 +81,7 @@ def run_bot():
 
 
 if __name__ == '__main__':
-    # Запуск Flask в отдельном потоке
     from threading import Thread
 
-    Thread(target=app.run, kwargs={'port': 5000}).start()
-
-    # Запуск Telegram бота
+    Thread(target=app.run, kwargs={'host': '0.0.0.0', 'port': 5000}).start()
     run_bot()

@@ -1,14 +1,47 @@
-// Инициализация Telegram Web App
+// Инициализация Telegram WebApp
 const tg = window.Telegram.WebApp;
 tg.expand();
 
-// Состояние приложения
+// Состояние пользователя
 let state = {
-    products: [],
+    user: {
+        id: tg.initDataUnsafe.user.id,
+        balance: 0
+    },
     cart: [],
-    user: null,
-    balance: 0
+    products: []
 };
+
+// Загрузка данных
+async function initApp() {
+    await loadUserData();
+    await loadProducts();
+    loadCart();
+    updateUI();
+    setupEventListeners();
+}
+
+// Интеграция с Telegram Payments
+async function checkout() {
+    const total = getCartTotal();
+
+    const invoice = {
+        title: "Оплата заказа",
+        description: `Товаров: ${state.cart.length}`,
+        currency: "XTR",
+        prices: [{ label: "Total", amount: total * 100 }], // В копейках
+        payload: JSON.stringify(state.cart)
+    };
+
+    tg.sendInvoice(invoice, (status) => {
+        if (status === "paid") {
+            state.cart = [];
+            saveCart();
+            updateUI();
+            tg.close();
+        }
+    });
+}
 
 // DOM элементы
 const elements = {
