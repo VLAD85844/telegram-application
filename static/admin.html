@@ -19,86 +19,64 @@
             <button type="submit">Добавить товар</button>
         </form>
         <div id="message"></div>
+
+        <div class="product-list mt-4">
+            <h3>Список товаров</h3>
+            <div id="products-list"></div>
+        </div>
     </div>
 
     <script>
-        document.getElementById('product-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
+        // Объединенный код для управления товарами
+        const productForm = document.getElementById('product-form');
+        const productsList = document.getElementById('products-list');
 
-            const formData = {
-                name: e.target.name.value,
-                price: e.target.price.value,
-                description: e.target.description.value,
-                category: e.target.category.value,
-                image: e.target.image.value
-            };
+        productForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = Object.fromEntries(new FormData(e.target));
 
             try {
                 const response = await fetch('/api/products', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(formData)
                 });
 
                 const result = await response.json();
-
-                if (result.status === 'success') {
-                    document.getElementById('message').innerHTML = `
-                        <div class="alert alert-success mt-3">
-                            Товар "${result.product.name}" успешно добавлен!
-                        </div>
-                    `;
-                    e.target.reset();
-                } else {
-                    throw new Error(result.message);
-                }
+                showMessage(result, 'Товар успешно добавлен!');
+                result.status === 'success' && (e.target.reset(), loadProducts());
             } catch (error) {
-                document.getElementById('message').innerHTML = `
-                    <div class="alert alert-danger mt-3">
-                        Ошибка: ${error.message}
-                    </div>
-                `;
+                showMessage({status: 'error', message: error.message});
             }
         });
+
+        async function loadProducts() {
+            const response = await fetch('/api/products');
+            const products = await response.json();
+            productsList.innerHTML = products.map(p => `
+                <div class="product-item mb-3">
+                    <div>${p.name} (${p.price} ⭐)</div>
+                    <button onclick="deleteProduct(${p.id})" class="btn btn-sm btn-danger">Удалить</button>
+                </div>
+            `).join('');
+        }
+
+        async function deleteProduct(id) {
+            await fetch(`/api/products/${id}`, {method: 'DELETE'});
+            const cart = JSON.parse(localStorage.getItem('marketplace_cart')) || [];
+            localStorage.setItem('marketplace_cart', JSON.stringify(cart.filter(item => item.product.id !== id)));
+            loadProducts();
+        }
+
+        function showMessage({status, message}, successText) {
+            document.getElementById('message').innerHTML = `
+                <div class="alert alert-${status} mt-3">
+                    ${status === 'success' ? successText : `Ошибка: ${message}`}
+                </div>
+            `;
+        }
+
+        loadProducts();
     </script>
 </body>
 </html>
-
-
-<div class="product-list mt-4">
-    <h3>Список товаров</h3>
-    <div id="products-list"></div>
-</div>
-
-<script>
-    // JavaScript для загрузки и удаления товаров
-    async function loadProducts() {
-        const response = await fetch('/api/products');
-        const products = await response.json();
-        const list = document.getElementById('products-list');
-        list.innerHTML = products.map(p => `
-            <div class="product-item mb-3">
-                <div>${p.name} (${p.price} ⭐)</div>
-                <button onclick="deleteProduct(${p.id})" class="btn btn-sm btn-danger">Удалить</button>
-            </div>
-        `).join('');
-    }
-
-    async function deleteProduct(id) {
-        // Удаление товара из админки
-        await fetch(`/api/products/${id}`, { method: 'DELETE' });
-
-        // Удаление товара из корзины, если он там есть
-        const cart = JSON.parse(localStorage.getItem('marketplace_cart')) || [];
-        const updatedCart = cart.filter(item => item.product.id !== id);
-        localStorage.setItem('marketplace_cart', JSON.stringify(updatedCart));
-
-        // Обновляем интерфейс с товаром и корзиной
-        loadProducts();
-        updateUI(); // Обновляем интерфейс корзины
-    }
-
-    loadProducts(); // Загрузить при открытии
-</script>

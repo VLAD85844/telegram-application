@@ -145,33 +145,18 @@ async function initPaymentFlow() {
     const neededStars = getCartTotal();
 
     try {
-        const response = await fetch('/api/create-payment', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                amount: neededStars,
-                user_id: state.user?.id,
-                cart: state.cart
-            })
+        const response = await tg.sendInvoice({
+            title: "Оплата товаров",
+            description: `Покупка на ${neededStars} звезд`,
+            payload: JSON.stringify(state.cart),
+            currency: "XTR",
+            prices: [{ label: "Итого", amount: neededStars * 100 }] // В копейках
         });
 
-        const paymentData = await response.json();
-
-        if(paymentData.confirmation && paymentData.confirmation.confirmation_url) {
-            // Открываем страницу оплаты
-            window.open(paymentData.confirmation.confirmation_url, '_blank');
-
-            // Стартуем проверку статуса
-            const checkInterval = setInterval(async () => {
-                const statusResponse = await fetch(`/api/check-payment/${paymentData.id}`);
-                const status = await statusResponse.json();
-
-                if(status === 'succeeded') {
-                    clearInterval(checkInterval);
-                    completeOrder();
-                }
-            }, 5000);
-        }
+        tg.onEvent('invoiceClosed', ({ status }) => {
+            if (status === 'paid') completeOrder();
+            else showAlert('Оплата отменена', 'error');
+        });
     } catch (error) {
         showAlert('Ошибка оплаты: ' + error.message, 'error');
     }
