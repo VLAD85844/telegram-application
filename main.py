@@ -34,26 +34,28 @@ def serve_index():
 
 
 @app.route('/api/createInvoice', methods=['POST'])
-async def create_invoice():
-    data = await request.json
+def create_invoice():
+    data = request.json
     user_id = data['userId']
     amount = data['amount']
     description = data['description']
 
     try:
-        # Формируем инвойс с нужными параметрами
-        invoice = await bot.send_invoice(
-            chat_id=user_id,  # Отправляем инвойс пользователю
-            title="Оплата товаров",  # Название инвойса
-            description=description,  # Описание
-            payload="some_payload",  # Персонализированная информация о платеже
-            provider_token=provider_token,  # Токен платежного провайдера
-            currency="XTR",  # Валюта
-            prices=[LabeledPrice("Итого", amount * 100)]  # Цена в копейках
-        )
+        # Создаем инвойс синхронно
+        invoice_url = bot.send_invoice(
+            chat_id=user_id,
+            title="Оплата товаров",
+            description=description,
+            payload="payload",
+            provider_token=provider_token,
+            currency="XTR",
+            prices=[LabeledPrice(label="Итого", amount=amount * 100)]
+        ).invoice_link  # Получаем прямую ссылку на оплату
 
-        # Теперь инвойс будет содержать атрибут 'url', который можно использовать
-        return jsonify({"status": "success", "paymentUrl": invoice.url})
+        return jsonify({
+            "status": "success",
+            "paymentUrl": invoice_url
+        })
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
