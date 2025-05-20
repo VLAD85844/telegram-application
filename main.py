@@ -7,11 +7,6 @@ import threading
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 import asyncio
-import logging
-
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_url_path='/static')
 CORS(app)
@@ -110,30 +105,23 @@ def delete_product(product_id):
 
 @app.route('/api/user')
 def get_user():
-    user_id = request.args.get('user_id')
-    if not user_id:
-        return jsonify({"status": "error", "message": "user_id is required"}), 400
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return jsonify({"error": "user_id is required"}), 400
 
-    user = User.query.get(user_id)
-    if not user:
-        # Создаем нового пользователя с балансом 0, если не найден
-        user = User(id=user_id, balance=0)
-        db.session.add(user)
-        db.session.commit()
-        return jsonify({"balance": 0})
+        user = User.query.get(user_id)
+        if not user:
+            user = User(id=user_id, balance=0)
+            db.session.add(user)
+            db.session.commit()
 
-    return jsonify({
-        "balance": user.balance,
-        "transactions": [{
-            "type": t.type,
-            "amount": t.amount,
-            "date": t.date.isoformat(),
-            "admin": t.admin,
-            "details": t.details
-        } for t in user.transactions]
-    })
-
-
+        return jsonify({
+            "balance": user.balance,
+            "transactions": [t.to_dict() for t in user.transactions]
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/user/deposit', methods=['POST'])
@@ -142,24 +130,22 @@ def deposit_funds():
     amount = request.json.get('amount')
     admin = request.json.get('admin', 'system')
 
-    # Получаем пользователя из базы данных
+    # Удалите этот блок
     with app.app_context():
         user = db.session.get(User, user_id)
-        if not user:
-            user = User(id=user_id, balance=0)
-            db.session.add(user)
+        ...
 
-        # Обновляем баланс
-        user.balance += amount
-        db.session.commit()
+    # Используйте стандартные методы SQLAlchemy
+    user = User.query.get(user_id)
+    if not user:
+        user = User(id=user_id, balance=0)
+        db.session.add(user)
 
-        # Обновляем данные в users_db для Telegram-бота
-        users_db[user_id] = {"balance": user.balance}
+    user.balance += amount
+    db.session.commit()  # Фиксируем изменения
 
-    return jsonify({
-        "status": "success",
-        "new_balance": user.balance
-    })
+    # Удалите строку с users_db[user_id] - это лишнее
+    return jsonify({"status": "success", "new_balance": user.balance})
 
 
 

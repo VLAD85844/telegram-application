@@ -44,12 +44,20 @@ async function initApp() {
 // Загрузка данных пользователя
 async function loadUserData() {
     try {
+        // Добавьте проверку
+        if (!tg.initDataUnsafe?.user?.id) {
+            throw new Error("User not initialized");
+        }
+
         const response = await fetch(`/api/user?user_id=${tg.initDataUnsafe.user.id}`);
+        if (!response.ok) throw new Error("HTTP error");
+
         const data = await response.json();
-        state.balance = data.balance;  // Обновляем баланс
-        updateUI();  // Обновляем интерфейс
+        state.balance = data.balance;
+        updateUI();
     } catch (error) {
         console.error('Ошибка загрузки данных:', error);
+        showAlert('Ошибка загрузки баланса', 'error');
     }
 }
 
