@@ -7,6 +7,11 @@ import threading
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 import asyncio
+import logging
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_url_path='/static')
 CORS(app)
@@ -58,30 +63,41 @@ users_db = {}
 def index():
     return send_from_directory('static', 'index.html')
 
+
 @app.route('/api/products', methods=['GET', 'POST'])
 def products():
     if request.method == 'POST':
-        new_product = Product(**request.json)
-        db.session.add(new_product)
-        db.session.commit()
-        return jsonify({"status": "success", "product": {
-            "id": new_product.id,
-            "name": new_product.name,
-            "price": new_product.price,
-            "description": new_product.description,
-            "category": new_product.category,
-            "image": new_product.image
-        }})
+        try:
+            data = request.json
+            if not data:
+                return jsonify({"status": "error", "message": "No data provided"}), 400
 
-    products = Product.query.all()
-    return jsonify([{
-        "id": p.id,
-        "name": p.name,
-        "price": p.price,
-        "description": p.description,
-        "category": p.category,
-        "image": p.image
-    } for p in products])
+            # Проверяем обязательные поля
+            required_fields = ['name', 'price', 'image', 'category']
+            for field in required_fields:
+                if field not in data:
+                    return jsonify({"status": "error", "message": f"Missing required field: {field}"}), 400
+
+            new_product = Product(
+                name=data['name'],
+                price=data['price'],
+                description=data.get('description', ''),
+                category=data['category'],
+                image=data['image']
+            )
+            db.session.add(new_product)
+            db.session.commit()
+            return jsonify({"status": "success", "product": {
+                "id": new_product.id,
+                "name": new_product.name,
+                "price": new_product.price,
+                "description": new_product.description,
+                "category": new_product.category,
+                "image": new_product.image
+            }})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @app.route('/api/products/<int:product_id>', methods=['DELETE'])
@@ -95,11 +111,17 @@ def delete_product(product_id):
 @app.route('/api/user')
 def get_user():
     user_id = request.args.get('user_id')
+    if not user_id:
+        return jsonify({"status": "error", "message": "user_id is required"}), 400
+
     user = User.query.get(user_id)
     if not user:
+        # Создаем нового пользователя с балансом 0, если не найден
+        user = User(id=user_id, balance=0)
+        db.session.add(user)
+        db.session.commit()
         return jsonify({"balance": 0})
 
-    app.logger.info(f"User {user_id} balance: {user.balance}")  # Логирование баланса пользователя
     return jsonify({
         "balance": user.balance,
         "transactions": [{
