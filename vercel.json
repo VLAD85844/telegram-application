@@ -17,11 +17,18 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "main.py"
+      "dest": "main.py",
+      "headers": {
+        "Content-Type": "application/json"
+      }
+    },
+    {
+      "src": "/static/(.*)",
+      "dest": "static/$1"
     },
     {
       "src": "/(.*)",
-      "dest": "static/$1"
+      "dest": "static/index.html"
     }
   ],
   "env": {

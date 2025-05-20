@@ -1,3 +1,17 @@
+async function safeFetch(url, options = {}) {
+    try {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Fetch error:', error);
+        showAlert('Ошибка соединения с сервером', 'error');
+        throw error;
+    }
+}
+
 // Инициализация Telegram WebApp
 const tg = window.Telegram.WebApp;
 tg.expand();
@@ -44,24 +58,17 @@ async function initApp() {
 // Загрузка данных пользователя
 async function loadUserData() {
     try {
-        // Получаем ID пользователя из WebApp
-        const userId = Telegram.WebApp.initDataUnsafe.user.id;
-        console.log("User ID: ", userId);  // Логирование ID пользователя
-
-        // Запрашиваем данные о пользователе с сервера
-        const response = await fetch(`/api/user?user_id=${userId}`);
-        if (!response.ok) {
-            throw new Error(`Ошибка: ${response.status} ${response.statusText}`);
+        const userId = Telegram.WebApp.initDataUnsafe?.user?.id;
+        if (!userId) {
+            throw new Error("User ID not available");
         }
 
-        const data = await response.json();
-        console.log("User data from API: ", data);  // Логирование данных пользователя
-
+        const data = await safeFetch(`/api/user?user_id=${userId}`);
         if (data.balance !== undefined) {
             state.balance = data.balance;
             updateUI();
         } else {
-            throw new Error("Ошибка: неверные данные от API");
+            throw new Error("Invalid user data received");
         }
     } catch (error) {
         console.error('Ошибка загрузки данных:', error);
@@ -75,10 +82,18 @@ async function loadUserData() {
 async function loadProducts() {
     try {
         const response = await fetch('/api/products');
-        state.products = await response.json();
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        if (!Array.isArray(data)) {
+            throw new Error("Invalid products data received");
+        }
+        state.products = data;
         renderProducts(state.products);
     } catch (error) {
         console.error('Ошибка загрузки товаров:', error);
+        showAlert('Ошибка загрузки товаров', 'error');
     }
 }
 
@@ -91,13 +106,13 @@ function renderProducts(products) {
         productCard.className = 'col';
         productCard.innerHTML = `
             <div class="card product-card h-100" data-id="${product.id}">
-                <img src="${product.image}" class="card-img-top" alt="${product.name}">
+                <img src="${product.image}" class="card-img-top" alt="${product.name}" loading="lazy">
                 <div class="card-body">
                     <h5 class="card-title">${product.name}</h5>
                     <p class="card-text">${product.description}</p>
                     <div class="d-flex justify-content-between align-items-center">
                         <span class="text-primary">${product.price} ⭐</span>
-                        <button class="btn btn-sm btn-outline-primary add-to-cart">Добавить</button>
+                        <button class="btn btn-sm btn-outline-primary add-to-cart" data-id="${product.id}">Добавить</button>
                     </div>
                 </div>
             </div>
@@ -336,29 +351,72 @@ document.getElementById('balance-form').addEventListener('submit', async (e) => 
 
 // Обработчики событий
 function setupEventListeners() {
-    // Делегирование событий для кнопок добавления в корзину
+    // Делегирование событий для всей страницы
     document.addEventListener('click', (e) => {
+        // Обработка добавления в корзину
         if (e.target.classList.contains('add-to-cart')) {
-            const productId = parseInt(e.target.closest('.product-card').dataset.id);
+            const productId = parseInt(e.target.dataset.id);
             addToCart(productId);
+            return;
+        }
+
+        // Обработка кнопок корзины
+        if (e.target.id === 'open-cart') {
+            toggleCart(true);
+            return;
+        }
+
+        if (e.target.id === 'close-cart') {
+            toggleCart(false);
+            return;
+        }
+
+        if (e.target.id === 'checkout-btn') {
+            initPaymentFlow();
+            return;
+        }
+
+        // Обработка кнопок категорий
+        if (e.target.hasAttribute('data-category')) {
+            elements.categoryButtons.forEach(btn => btn.classList.remove('active'));
+            e.target.classList.add('active');
+            const category = e.target.dataset.category;
+            const filtered = category === 'all'
+                ? state.products
+                : state.products.filter(p => p.category === category);
+            renderProducts(filtered);
         }
     });
 
-    // Обработчики для кнопок корзины
-    elements.openCartBtn.addEventListener('click', () => toggleCart(true));
-    elements.closeCartBtn.addEventListener('click', () => toggleCart(false));
-    elements.checkoutBtn.addEventListener('click', () => initPaymentFlow());
+    // Обработчики для динамически создаваемых элементов корзины
+    elements.cartItems.addEventListener('click', (e) => {
+        const cartItem = e.target.closest('.cart-item');
+        if (!cartItem) return;
 
-    // Обработчики категорий
-    elements.categoryButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            elements.categoryButtons.forEach(btn => btn.classList.remove('active'));
-            button.classList.add('active');
-            const filtered = button.dataset.category === 'all'
-                ? state.products
-                : state.products.filter(p => p.category === button.dataset.category);
-            renderProducts(filtered);
-        });
+        const productId = parseInt(cartItem.dataset.id);
+
+        if (e.target.classList.contains('minus-btn')) {
+            const input = cartItem.querySelector('.quantity-input');
+            updateCartItemQuantity(productId, parseInt(input.value) - 1);
+        }
+
+        if (e.target.classList.contains('plus-btn')) {
+            const input = cartItem.querySelector('.quantity-input');
+            updateCartItemQuantity(productId, parseInt(input.value) + 1);
+        }
+
+        if (e.target.classList.contains('remove-btn')) {
+            removeFromCart(productId);
+        }
+    });
+
+    // Обработчик изменения количества через input
+    elements.cartItems.addEventListener('change', (e) => {
+        if (e.target.classList.contains('quantity-input')) {
+            const cartItem = e.target.closest('.cart-item');
+            const productId = parseInt(cartItem.dataset.id);
+            updateCartItemQuantity(productId, parseInt(e.target.value));
+        }
     });
 
     tg.onEvent('viewportChanged', () => tg.isExpanded && tg.enableClosingConfirmation());

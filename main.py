@@ -61,9 +61,23 @@ def index():
 
 @app.route('/api/products', methods=['GET', 'POST'])
 def products():
+    if request.method == 'GET':
+        try:
+            products = Product.query.all()
+            return jsonify([{
+                "id": p.id,
+                "name": p.name,
+                "price": p.price,
+                "description": p.description,
+                "category": p.category,
+                "image": p.image
+            } for p in products])
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+
     if request.method == 'POST':
         try:
-            data = request.json
+            data = request.get_json()
             if not data:
                 return jsonify({"status": "error", "message": "No data provided"}), 400
 
@@ -75,21 +89,24 @@ def products():
 
             new_product = Product(
                 name=data['name'],
-                price=data['price'],
+                price=int(data['price']),
                 description=data.get('description', ''),
                 category=data['category'],
                 image=data['image']
             )
             db.session.add(new_product)
             db.session.commit()
-            return jsonify({"status": "success", "product": {
-                "id": new_product.id,
-                "name": new_product.name,
-                "price": new_product.price,
-                "description": new_product.description,
-                "category": new_product.category,
-                "image": new_product.image
-            }})
+            return jsonify({
+                "status": "success",
+                "product": {
+                    "id": new_product.id,
+                    "name": new_product.name,
+                    "price": new_product.price,
+                    "description": new_product.description,
+                    "category": new_product.category,
+                    "image": new_product.image
+                }
+            })
         except Exception as e:
             db.session.rollback()
             return jsonify({"status": "error", "message": str(e)}), 500
