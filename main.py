@@ -24,10 +24,7 @@ products_db = []
 
 WEB_APP_URL = "https://telegram-application-gcf2.vercel.app/"
 ADMIN_URL = "https://telegram-application-gcf2.vercel.app/admin.html"
-provider_token = ""
-@app.route('/')
-def serve_index():
-    return send_from_directory('static', 'index.html')
+
 
 
 @app.route('/api/createInvoice', methods=['POST'])
