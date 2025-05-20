@@ -108,7 +108,7 @@ def get_user():
     try:
         user_id = request.args.get('user_id')
         if not user_id:
-            return jsonify({"error": "user_id is required"}), 400
+            return jsonify({"error": "user_id is required"}), 400  # Вернем ошибку, если нет user_id
 
         user = User.query.get(user_id)
         if not user:
@@ -121,31 +121,32 @@ def get_user():
             "transactions": [t.to_dict() for t in user.transactions]
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e)}), 500  # Возвращаем ошибку с сообщением в формате JSON
+
 
 
 @app.route('/api/user/deposit', methods=['POST'])
 def deposit_funds():
-    user_id = request.json.get('user_id')
-    amount = request.json.get('amount')
-    admin = request.json.get('admin', 'system')
+    try:
+        user_id = request.json.get('user_id')
+        amount = request.json.get('amount')
+        admin = request.json.get('admin', 'system')
 
-    # Удалите этот блок
-    with app.app_context():
-        user = db.session.get(User, user_id)
-        ...
+        if not user_id or amount is None:
+            return jsonify({"error": "user_id and amount are required"}), 400
 
-    # Используйте стандартные методы SQLAlchemy
-    user = User.query.get(user_id)
-    if not user:
-        user = User(id=user_id, balance=0)
-        db.session.add(user)
+        user = User.query.get(user_id)
+        if not user:
+            user = User(id=user_id, balance=0)
+            db.session.add(user)
 
-    user.balance += amount
-    db.session.commit()  # Фиксируем изменения
+        user.balance += amount
+        db.session.commit()
 
-    # Удалите строку с users_db[user_id] - это лишнее
-    return jsonify({"status": "success", "new_balance": user.balance})
+        return jsonify({"status": "success", "new_balance": user.balance})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 
 

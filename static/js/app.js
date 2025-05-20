@@ -44,22 +44,31 @@ async function initApp() {
 // Загрузка данных пользователя
 async function loadUserData() {
     try {
-        // Добавьте проверку
-        if (!tg.initDataUnsafe?.user?.id) {
-            throw new Error("User not initialized");
+        // Получаем ID пользователя из WebApp
+        const userId = Telegram.WebApp.initDataUnsafe.user.id;
+        console.log("User ID: ", userId);  // Логирование ID пользователя
+
+        // Запрашиваем данные о пользователе с сервера
+        const response = await fetch(`/api/user?user_id=${userId}`);
+        if (!response.ok) {
+            throw new Error(`Ошибка: ${response.status} ${response.statusText}`);
         }
 
-        const response = await fetch(`/api/user?user_id=${tg.initDataUnsafe.user.id}`);
-        if (!response.ok) throw new Error("HTTP error");
-
         const data = await response.json();
-        state.balance = data.balance;
-        updateUI();
+        console.log("User data from API: ", data);  // Логирование данных пользователя
+
+        if (data.balance !== undefined) {
+            state.balance = data.balance;
+            updateUI();
+        } else {
+            throw new Error("Ошибка: неверные данные от API");
+        }
     } catch (error) {
         console.error('Ошибка загрузки данных:', error);
         showAlert('Ошибка загрузки баланса', 'error');
     }
 }
+
 
 
 // Загрузка товаров
@@ -327,18 +336,20 @@ document.getElementById('balance-form').addEventListener('submit', async (e) => 
 
 // Обработчики событий
 function setupEventListeners() {
+    // Делегирование событий для кнопок добавления в корзину
     document.addEventListener('click', (e) => {
         if (e.target.classList.contains('add-to-cart')) {
             const productId = parseInt(e.target.closest('.product-card').dataset.id);
             addToCart(productId);
         }
-
-        if (e.target.id === 'checkout-btn') initPaymentFlow();
     });
 
+    // Обработчики для кнопок корзины
     elements.openCartBtn.addEventListener('click', () => toggleCart(true));
     elements.closeCartBtn.addEventListener('click', () => toggleCart(false));
+    elements.checkoutBtn.addEventListener('click', () => initPaymentFlow());
 
+    // Обработчики категорий
     elements.categoryButtons.forEach(button => {
         button.addEventListener('click', () => {
             elements.categoryButtons.forEach(btn => btn.classList.remove('active'));

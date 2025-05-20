@@ -51,13 +51,15 @@
 
         productForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const formData = Object.fromEntries(new FormData(e.target));
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            data.price = parseInt(data.price); // Преобразуем цену в число
 
             try {
                 const response = await fetch('/api/products', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(formData)
+                    body: JSON.stringify(data)
                 });
 
                 const result = await response.json();
@@ -93,9 +95,14 @@
 
         async function deleteProduct(id) {
             try {
-                await fetch(`/api/products/${id}`, {method: 'DELETE'});
-                loadProducts();
-                showMessage({status: 'success'}, 'Товар успешно удален');
+                const response = await fetch(`/api/products/${id}`, {method: 'DELETE'});
+                const result = await response.json();
+                if (result.status === 'success') {
+                    loadProducts();
+                    showMessage({status: 'success'}, 'Товар успешно удален');
+                } else {
+                    showMessage({status: 'error', message: result.message || 'Ошибка удаления товара'});
+                }
             } catch (error) {
                 showMessage({status: 'error', message: error.message});
             }
@@ -114,15 +121,17 @@
         // Управление балансом
         document.getElementById('balance-form').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const formData = Object.fromEntries(new FormData(e.target));
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            data.amount = parseInt(data.amount);
 
             try {
                 const response = await fetch('/api/user/deposit', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        user_id: formData.user_id,
-                        amount: formData.action === 'deposit' ? +formData.amount : -formData.amount,
+                        user_id: data.user_id,
+                        amount: data.action === 'deposit' ? data.amount : -data.amount,
                         admin: 'admin_panel'
                     })
                 });
