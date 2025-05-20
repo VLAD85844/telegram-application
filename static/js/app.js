@@ -141,22 +141,38 @@ async function getStarsPrice(quantity) {
     }
 }
 
+// Заменим старую функцию initPaymentFlow
 async function initPaymentFlow() {
     const neededStars = getCartTotal();
 
     try {
-        const response = await tg.sendInvoice({
+        // Создаем инвойс для Telegram Stars
+        const invoice = {
             title: "Оплата товаров",
             description: `Покупка на ${neededStars} звезд`,
-            payload: JSON.stringify(state.cart),
-            currency: "XTR",
-            prices: [{ label: "Итого", amount: neededStars * 100 }] // В копейках
+            currency: "XTR", // Валюта Stars
+            prices: [{
+                label: "Итого",
+                amount: neededStars * 100 // Сумма в копейках
+            }],
+            payload: JSON.stringify({
+                cart: state.cart,
+                userId: tg.initDataUnsafe.user.id
+            })
+        };
+
+        // Отправляем инвойс
+        tg.showInvoice(invoice, (status) => {
+            if(status === 'paid') {
+                completeOrder();
+                // Обновляем баланс пользователя
+                state.balance -= neededStars;
+                updateUI();
+            } else {
+                showAlert('Оплата отменена', 'error');
+            }
         });
 
-        tg.onEvent('invoiceClosed', ({ status }) => {
-            if (status === 'paid') completeOrder();
-            else showAlert('Оплата отменена', 'error');
-        });
     } catch (error) {
         showAlert('Ошибка оплаты: ' + error.message, 'error');
     }
@@ -200,6 +216,17 @@ async function checkPaymentStatus(wallet) {
 }
 
 function completeOrder() {
+    // Отправляем данные о платеже на сервер
+    fetch('/api/payment', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            user_id: tg.initDataUnsafe.user.id,
+            amount: getCartTotal()
+        })
+    });
+
+    // Очищаем корзину
     state.cart = [];
     saveCart();
     updateUI();

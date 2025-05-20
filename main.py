@@ -21,8 +21,8 @@ products_db = []
 
 # Конфигурация Telegram
 TOKEN = "7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY"
-WEB_APP_URL = "https://telegram-application-vlads-projects-09d1df59.vercel.app/"
-ADMIN_URL = "https://telegram-application-vlads-projects-09d1df59.vercel.app/admin.html"
+WEB_APP_URL = "https://telegram-application-gcf2.vercel.app/"
+ADMIN_URL = "https://telegram-application-gcf2.vercel.app/admin.html"
 
 @app.route('/')
 def serve_index():
@@ -71,11 +71,19 @@ def delete_product(product_id):
 def get_products():
     return jsonify(products_db)
 
+
 @app.route('/api/payment', methods=['POST'])
 def handle_payment():
     data = request.json
-    # Логика проверки платежа через Telegram API
-    return jsonify({"status": "success"})
+    user_id = data['user_id']
+    amount = data['amount']
+
+    # Обновляем баланс пользователя
+    if user_id in users_db:
+        users_db[user_id]['balance'] -= amount
+        return jsonify({"status": "success"})
+
+    return jsonify({"status": "error", "message": "User not found"}), 404
 
 @app.route('/api/user')
 def get_user():
