@@ -35,7 +35,7 @@ def serve_index():
 
 @app.route('/api/createInvoice', methods=['POST'])
 def create_invoice():
-    data = request.json
+    data = request.get_json()
     user_id = data['userId']
     amount = data['amount']
     description = data['description']
@@ -55,7 +55,7 @@ def create_invoice():
         return jsonify({
             "status": "success",
             "paymentUrl": invoice_url
-        })
+        }), 200
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
@@ -90,16 +90,17 @@ def handle_payment_confirmation():
 @app.route('/api/products', methods=['POST'])
 def add_product():
     try:
+        data = request.get_json()  # Правильное получение данных
         new_product = {
             "id": len(products_db) + 1,
-            "name": request.json['name'],
-            "price": int(request.json['price']),
-            "description": request.json.get('description', ''),
-            "category": request.json.get('category', 'popular'),
-            "image": request.json.get('image', '')
+            "name": data['name'],
+            "price": int(data['price']),
+            "description": data.get('description', ''),
+            "category": data.get('category', 'popular'),
+            "image": data.get('image', '')
         }
         products_db.append(new_product)
-        return jsonify({"status": "success", "product": new_product})
+        return jsonify({"status": "success", "product": new_product}), 201
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
 
