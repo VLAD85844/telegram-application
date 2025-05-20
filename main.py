@@ -2,7 +2,7 @@ import logging
 import json
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
-from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup, Bot, LabeledPrice
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -10,6 +10,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
     CallbackContext,
+    Updater,
 )
 
 app = Flask(__name__)
@@ -21,12 +22,39 @@ products_db = []
 
 # Конфигурация Telegram
 TOKEN = "7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY"
+bot = Bot(token="7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY")
 WEB_APP_URL = "https://telegram-application-gcf2.vercel.app/"
 ADMIN_URL = "https://telegram-application-gcf2.vercel.app/admin.html"
-
+provider_token = "sk_test_51RQjly304XWcrcFGbB57aWDI2XoYxf0nic2BS1dWgnXMa4qVeM7fLYuaVgbgEIsrayTvldFIlUxF8WjKvGZiAV1q00VnT7g568"
 @app.route('/')
 def serve_index():
     return send_from_directory('static', 'index.html')
+
+
+@app.route('/api/createInvoice', methods=['POST'])
+def create_invoice():
+    data = request.json
+    user_id = data['userId']
+    amount = data['amount']
+    description = data['description']
+
+    try:
+        # Формируем инвойс с нужными параметрами
+        invoice = bot.send_invoice(
+            chat_id=user_id,  # Отправляем инвойс пользователю
+            title="Оплата товаров",  # Название инвойса
+            description=description,  # Описание
+            payload="some_payload",  # Персонализированная информация о платеже
+            provider_token=provider_token,  # Токен платежного провайдера
+            currency="XTR",  # Валюта (если используется Stars API, это будет XTR)
+            prices=[LabeledPrice("Итого", amount * 100)]
+            # Сумма, умноженная на 100 (платежные системы требуют указания суммы в копейках)
+        )
+
+        return jsonify({"status": "success", "paymentUrl": invoice.url})
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
 
 
 @app.route('/css/<path:filename>')
@@ -44,6 +72,15 @@ def index():
 @app.route('/admin.html')
 def admin_panel():
     return send_from_directory('static', 'admin.html')
+
+@app.route('/webhook', methods=['POST'])
+def handle_payment_confirmation():
+    data = request.json
+    # Проверьте статус платежа и выполните необходимые действия (например, обновление баланса)
+    if data['status'] == 'paid':
+        # Завершаем заказ, обновляем баланс и т.д.
+        return jsonify({"status": "success"})
+    return jsonify({"status": "error", "message": "Payment failed"}), 400
 
 @app.route('/api/products', methods=['POST'])
 def add_product():

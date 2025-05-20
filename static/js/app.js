@@ -143,38 +143,32 @@ async function getStarsPrice(quantity) {
 
 // Заменим старую функцию initPaymentFlow
 async function initPaymentFlow() {
-    const neededStars = getCartTotal();
+    const neededStars = getCartTotal();  // Получаем сумму для оплаты
 
     try {
-        // Создаем инвойс для Telegram Stars
-        const invoice = {
-            title: "Оплата товаров",
-            description: `Покупка на ${neededStars} звезд`,
-            currency: "XTR", // Валюта Stars
-            prices: [{
-                label: "Итого",
-                amount: neededStars * 100 // Сумма в копейках
-            }],
-            payload: JSON.stringify({
-                cart: state.cart,
-                userId: tg.initDataUnsafe.user.id
+        // Отправляем запрос на создание инвойса
+        const response = await fetch('/api/createInvoice', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                amount: neededStars,  // Сумма в звездах
+                description: `Покупка на ${neededStars} звезд`,
+                userId: tg.initDataUnsafe.user.id  // Получаем ID пользователя
             })
-        };
-
-        // Отправляем инвойс через Telegram WebApp API
-        await tg.sendInvoice(invoice);
-
-        tg.onEvent('invoiceClosed', ({ status }) => {
-            if (status === 'paid') {
-                completeOrder();
-                state.balance -= neededStars;
-                updateUI();
-            } else {
-                showAlert('Оплата отменена', 'error');
-            }
         });
+
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            // Перенаправляем пользователя на URL оплаты
+            window.location.href = result.paymentUrl;
+        } else {
+            showAlert('Ошибка создания инвойса: ' + result.message, 'error');
+        }
     } catch (error) {
-        showAlert('Ошибка оплаты: ' + error.message, 'error');
+        showAlert('Ошибка при отправке запроса: ' + error.message, 'error');
     }
 }
 
