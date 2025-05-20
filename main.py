@@ -25,7 +25,7 @@ TOKEN = "7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY"
 bot = Bot(token="7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY")
 WEB_APP_URL = "https://telegram-application-gcf2.vercel.app/"
 ADMIN_URL = "https://telegram-application-gcf2.vercel.app/admin.html"
-provider_token = "  "
+provider_token = ""
 @app.route('/')
 def serve_index():
     return send_from_directory('static', 'index.html')
