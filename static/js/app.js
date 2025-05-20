@@ -141,13 +141,23 @@ async function getStarsPrice(quantity) {
     }
 }
 
+let stripe;
+let elements;
+
+async function initStripe() {
+    stripe = Stripe('pk_test_YOUR_STRIPE_PUBLIC_KEY');
+    elements = stripe.elements();
+    const cardElement = elements.create('card');
+    cardElement.mount('#card-element');
+}
+
 async function initPaymentFlow() {
+    showPaymentDialog(); // Показываем форму оплаты
+
     try {
         const response = await fetch('/api/create-payment-intent', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 amount: getCartTotal(),
                 user_id: state.user.id,
@@ -157,25 +167,21 @@ async function initPaymentFlow() {
 
         const {clientSecret} = await response.json();
 
-        const stripe = Stripe('pk_test_YOUR_STRIPE_PUBLIC_KEY');
         const {error} = await stripe.confirmCardPayment(clientSecret, {
-            payment_method: {
-                card: elements.getElement(CardElement)
-            }
+            payment_method: {card: elements.getElement('card')}
         });
 
         if (error) {
-            showAlert(`Payment error: ${error.message}`, 'error');
+            showAlert(`Ошибка оплаты: ${error.message}`, 'error');
         } else {
             completeOrder();
         }
-
     } catch (error) {
-        showAlert('Ошибка оплаты: ' + error.message, 'error');
+        showAlert('Ошибка: ' + error.message, 'error');
     }
 }
 
-// Добавить форму для карты в payment-dialog
+// Обновленная функция показа диалога
 function showPaymentDialog() {
     const dialogHTML = `
         <div class="payment-dialog">
@@ -186,13 +192,7 @@ function showPaymentDialog() {
     `;
 
     document.body.insertAdjacentHTML('beforeend', dialogHTML);
-
-    const stripe = Stripe('pk_test_YOUR_STRIPE_PUBLIC_KEY');
-    const elements = stripe.elements();
-    const cardElement = elements.create('card');
-    cardElement.mount('#card-element');
-
-    document.getElementById('submit-payment').addEventListener('click', initPaymentFlow);
+    initStripe();
 }
 
 async function checkPaymentStatus(wallet) {
