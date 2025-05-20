@@ -18,7 +18,7 @@ from telegram.ext import (
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)  # Разрешаем CORS
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # База данных
 users_db = {}
@@ -26,7 +26,7 @@ products_db = []
 
 # Конфигурация Telegram
 TOKEN = "7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY"
-stripe.api_key = os.getenv('sk_test_51RQjly304XWcrcFGbB57aWDI2XoYxf0nic2BS1dWgnXMa4qVeM7fLYuaVgbgEIsrayTvldFIlUxF8WjKvGZiAV1q00VnT7g568')
+stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 WEB_APP_URL = "https://telegram-application-gcf2.vercel.app/"
 ADMIN_URL = "https://telegram-application-gcf2.vercel.app/admin.html"
 
@@ -86,6 +86,8 @@ def handle_payment():
 @app.route('/api/user')
 def get_user():
     user_id = request.args.get('user_id')
+    if not user_id:
+        return jsonify(error="Missing user_id"), 400
     return jsonify(users_db.get(user_id, {"balance": 0}))
 
 
@@ -93,6 +95,8 @@ def get_user():
 def create_payment():
     try:
         data = request.json
+        if not data or 'amount' not in data:
+            return jsonify(error="Invalid request data"), 400
         amount = data['amount'] * 100  # Переводим в центы
 
         payment_intent = stripe.PaymentIntent.create(
@@ -132,6 +136,10 @@ def stripe_webhook():
 
     return jsonify(success=True)
 
+@app.errorhandler(Exception)
+def handle_exception(e):
+    app.logger.error(f"Server error: {str(e)}")
+    return jsonify(status="error", message="Internal server error"), 500
 
 def handle_successful_payment(payment_intent):
     user_id = payment_intent['metadata']['user_id']
