@@ -2,9 +2,15 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes
+import os
 
 app = Flask(__name__)
 CORS(app)
+
+if not os.path.exists('static'):
+    os.makedirs('static/css')
+    os.makedirs('static/js')
+    print("Создана структура папок для статических файлов")
 
 # База данных
 users_db = {}
@@ -17,7 +23,7 @@ ADMIN_URL = f"{WEB_APP_URL}admin.html"
 
 
 @app.route('/')
-def serve_index():
+def index():
     return send_from_directory('static', 'index.html')
 
 
@@ -26,9 +32,9 @@ def admin_panel():
     return send_from_directory('static', 'admin.html')
 
 
-@app.route('/static/<path:path>')
-def serve_static(path):
-    return send_from_directory('static', path)
+@app.route('/<path:filename>')
+def serve_static(filename):
+    return send_from_directory('static', filename)
 
 
 # API Endpoints
@@ -80,7 +86,4 @@ def run_bot():
 
 
 if __name__ == '__main__':
-    from threading import Thread
-
-    Thread(target=app.run, kwargs={'host': '0.0.0.0', 'port': 5000}).start()
-    run_bot()
+    app.run(host='0.0.0.0', port=5000, debug=True)
