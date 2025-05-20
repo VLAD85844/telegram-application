@@ -161,18 +161,18 @@ async function initPaymentFlow() {
             })
         };
 
-        // Отправляем инвойс
-        tg.showInvoice(invoice, (status) => {
-            if(status === 'paid') {
+        // Отправляем инвойс через Telegram WebApp API
+        await tg.sendInvoice(invoice);
+
+        tg.onEvent('invoiceClosed', ({ status }) => {
+            if (status === 'paid') {
                 completeOrder();
-                // Обновляем баланс пользователя
                 state.balance -= neededStars;
                 updateUI();
             } else {
                 showAlert('Оплата отменена', 'error');
             }
         });
-
     } catch (error) {
         showAlert('Ошибка оплаты: ' + error.message, 'error');
     }
