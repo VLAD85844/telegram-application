@@ -1,17 +1,3 @@
-async function safeFetch(url, options = {}) {
-    try {
-        const response = await fetch(url, options);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return await response.json();
-    } catch (error) {
-        console.error('Fetch error:', error);
-        showAlert('Ошибка соединения с сервером', 'error');
-        throw error;
-    }
-}
-
 // Инициализация Telegram WebApp
 const tg = window.Telegram.WebApp;
 tg.expand();
@@ -58,42 +44,24 @@ async function initApp() {
 // Загрузка данных пользователя
 async function loadUserData() {
     try {
-        const userId = Telegram.WebApp.initDataUnsafe?.user?.id;
-        if (!userId) {
-            throw new Error("User ID not available");
-        }
-
-        const data = await safeFetch(`/api/user?user_id=${userId}`);
-        if (data.balance !== undefined) {
-            state.balance = data.balance;
-            updateUI();
-        } else {
-            throw new Error("Invalid user data received");
-        }
+        const response = await fetch(`/api/user?user_id=${tg.initDataUnsafe.user.id}`);
+        const data = await response.json();
+        state.balance = data.balance;  // Обновляем баланс
+        updateUI();  // Обновляем интерфейс
     } catch (error) {
         console.error('Ошибка загрузки данных:', error);
-        showAlert('Ошибка загрузки баланса', 'error');
     }
 }
-
 
 
 // Загрузка товаров
 async function loadProducts() {
     try {
         const response = await fetch('/api/products');
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        if (!Array.isArray(data)) {
-            throw new Error("Invalid products data received");
-        }
-        state.products = data;
+        state.products = await response.json();
         renderProducts(state.products);
     } catch (error) {
         console.error('Ошибка загрузки товаров:', error);
-        showAlert('Ошибка загрузки товаров', 'error');
     }
 }
 
@@ -106,13 +74,13 @@ function renderProducts(products) {
         productCard.className = 'col';
         productCard.innerHTML = `
             <div class="card product-card h-100" data-id="${product.id}">
-                <img src="${product.image}" class="card-img-top" alt="${product.name}" loading="lazy">
+                <img src="${product.image}" class="card-img-top" alt="${product.name}">
                 <div class="card-body">
                     <h5 class="card-title">${product.name}</h5>
                     <p class="card-text">${product.description}</p>
                     <div class="d-flex justify-content-between align-items-center">
                         <span class="text-primary">${product.price} ⭐</span>
-                        <button class="btn btn-sm btn-outline-primary add-to-cart" data-id="${product.id}">Добавить</button>
+                        <button class="btn btn-sm btn-outline-primary add-to-cart">Добавить</button>
                     </div>
                 </div>
             </div>
@@ -351,72 +319,27 @@ document.getElementById('balance-form').addEventListener('submit', async (e) => 
 
 // Обработчики событий
 function setupEventListeners() {
-    // Делегирование событий для всей страницы
     document.addEventListener('click', (e) => {
-        // Обработка добавления в корзину
         if (e.target.classList.contains('add-to-cart')) {
-            const productId = parseInt(e.target.dataset.id);
+            const productId = parseInt(e.target.closest('.product-card').dataset.id);
             addToCart(productId);
-            return;
         }
 
-        // Обработка кнопок корзины
-        if (e.target.id === 'open-cart') {
-            toggleCart(true);
-            return;
-        }
+        if (e.target.id === 'checkout-btn') initPaymentFlow();
+    });
 
-        if (e.target.id === 'close-cart') {
-            toggleCart(false);
-            return;
-        }
+    elements.openCartBtn.addEventListener('click', () => toggleCart(true));
+    elements.closeCartBtn.addEventListener('click', () => toggleCart(false));
 
-        if (e.target.id === 'checkout-btn') {
-            initPaymentFlow();
-            return;
-        }
-
-        // Обработка кнопок категорий
-        if (e.target.hasAttribute('data-category')) {
+    elements.categoryButtons.forEach(button => {
+        button.addEventListener('click', () => {
             elements.categoryButtons.forEach(btn => btn.classList.remove('active'));
-            e.target.classList.add('active');
-            const category = e.target.dataset.category;
-            const filtered = category === 'all'
+            button.classList.add('active');
+            const filtered = button.dataset.category === 'all'
                 ? state.products
-                : state.products.filter(p => p.category === category);
+                : state.products.filter(p => p.category === button.dataset.category);
             renderProducts(filtered);
-        }
-    });
-
-    // Обработчики для динамически создаваемых элементов корзины
-    elements.cartItems.addEventListener('click', (e) => {
-        const cartItem = e.target.closest('.cart-item');
-        if (!cartItem) return;
-
-        const productId = parseInt(cartItem.dataset.id);
-
-        if (e.target.classList.contains('minus-btn')) {
-            const input = cartItem.querySelector('.quantity-input');
-            updateCartItemQuantity(productId, parseInt(input.value) - 1);
-        }
-
-        if (e.target.classList.contains('plus-btn')) {
-            const input = cartItem.querySelector('.quantity-input');
-            updateCartItemQuantity(productId, parseInt(input.value) + 1);
-        }
-
-        if (e.target.classList.contains('remove-btn')) {
-            removeFromCart(productId);
-        }
-    });
-
-    // Обработчик изменения количества через input
-    elements.cartItems.addEventListener('change', (e) => {
-        if (e.target.classList.contains('quantity-input')) {
-            const cartItem = e.target.closest('.cart-item');
-            const productId = parseInt(cartItem.dataset.id);
-            updateCartItemQuantity(productId, parseInt(e.target.value));
-        }
+        });
     });
 
     tg.onEvent('viewportChanged', () => tg.isExpanded && tg.enableClosingConfirmation());
@@ -437,4 +360,3 @@ function showAlert(message, type = 'success') {
 
 // Запуск приложения
 document.addEventListener('DOMContentLoaded', initApp);
-document.addEventListener('DOMContentLoaded', loadUserData);

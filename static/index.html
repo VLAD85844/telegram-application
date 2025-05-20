@@ -67,5 +67,27 @@
 
     <!-- Ваш основной скрипт, подключаем после telegram-web-app.js -->
     <script src="/static/js/app.js"></script>
+
+    <script>
+        // Функция для загрузки данных пользователя и обновления баланса
+        async function loadUserData() {
+            try {
+                // Получаем ID пользователя из WebApp
+                const userId = Telegram.WebApp.initDataUnsafe.user.id;
+
+                // Запрашиваем данные о пользователе с сервера
+                const response = await fetch(`/api/user?user_id=${userId}`);
+                const data = await response.json();
+
+                // Обновляем баланс на странице
+                document.getElementById('stars-count').textContent = data.balance;
+            } catch (error) {
+                console.error('Ошибка загрузки данных:', error);
+            }
+        }
+
+        // Загружаем данные при старте
+        window.onload = loadUserData;
+    </script>
 </body>
 </html>

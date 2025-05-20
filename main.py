@@ -58,58 +58,30 @@ users_db = {}
 def index():
     return send_from_directory('static', 'index.html')
 
-
 @app.route('/api/products', methods=['GET', 'POST'])
 def products():
-    if request.method == 'GET':
-        try:
-            products = Product.query.all()
-            return jsonify([{
-                "id": p.id,
-                "name": p.name,
-                "price": p.price,
-                "description": p.description,
-                "category": p.category,
-                "image": p.image
-            } for p in products])
-        except Exception as e:
-            return jsonify({"status": "error", "message": str(e)}), 500
-
     if request.method == 'POST':
-        try:
-            data = request.get_json()
-            if not data:
-                return jsonify({"status": "error", "message": "No data provided"}), 400
+        new_product = Product(**request.json)
+        db.session.add(new_product)
+        db.session.commit()
+        return jsonify({"status": "success", "product": {
+            "id": new_product.id,
+            "name": new_product.name,
+            "price": new_product.price,
+            "description": new_product.description,
+            "category": new_product.category,
+            "image": new_product.image
+        }})
 
-            # Проверяем обязательные поля
-            required_fields = ['name', 'price', 'image', 'category']
-            for field in required_fields:
-                if field not in data:
-                    return jsonify({"status": "error", "message": f"Missing required field: {field}"}), 400
-
-            new_product = Product(
-                name=data['name'],
-                price=int(data['price']),
-                description=data.get('description', ''),
-                category=data['category'],
-                image=data['image']
-            )
-            db.session.add(new_product)
-            db.session.commit()
-            return jsonify({
-                "status": "success",
-                "product": {
-                    "id": new_product.id,
-                    "name": new_product.name,
-                    "price": new_product.price,
-                    "description": new_product.description,
-                    "category": new_product.category,
-                    "image": new_product.image
-                }
-            })
-        except Exception as e:
-            db.session.rollback()
-            return jsonify({"status": "error", "message": str(e)}), 500
+    products = Product.query.all()
+    return jsonify([{
+        "id": p.id,
+        "name": p.name,
+        "price": p.price,
+        "description": p.description,
+        "category": p.category,
+        "image": p.image
+    } for p in products])
 
 
 @app.route('/api/products/<int:product_id>', methods=['DELETE'])
@@ -122,48 +94,48 @@ def delete_product(product_id):
 
 @app.route('/api/user')
 def get_user():
-    try:
-        user_id = request.args.get('user_id')
-        if not user_id:
-            return jsonify({"error": "user_id is required"}), 400  # Вернем ошибку, если нет user_id
+    user_id = request.args.get('user_id')
+    user = User.query.get(user_id)  # Получаем пользователя по ID
+    if not user:
+        return jsonify({"balance": 0})  # Если пользователь не найден, возвращаем 0
 
-        user = User.query.get(user_id)
-        if not user:
-            user = User(id=user_id, balance=0)
-            db.session.add(user)
-            db.session.commit()
-
-        return jsonify({
-            "balance": user.balance,
-            "transactions": [t.to_dict() for t in user.transactions]
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500  # Возвращаем ошибку с сообщением в формате JSON
+    return jsonify({
+        "balance": user.balance,
+        "transactions": [{
+            "type": t.type,
+            "amount": t.amount,
+            "date": t.date.isoformat(),
+            "admin": t.admin,
+            "details": t.details
+        } for t in user.transactions]
+    })
 
 
 
 @app.route('/api/user/deposit', methods=['POST'])
 def deposit_funds():
-    try:
-        user_id = request.json.get('user_id')
-        amount = request.json.get('amount')
-        admin = request.json.get('admin', 'system')
+    user_id = request.json.get('user_id')
+    amount = request.json.get('amount')
+    admin = request.json.get('admin', 'system')
 
-        if not user_id or amount is None:
-            return jsonify({"error": "user_id and amount are required"}), 400
-
-        user = User.query.get(user_id)
+    # Получаем пользователя из базы данных
+    with app.app_context():
+        user = db.session.get(User, user_id)
         if not user:
             user = User(id=user_id, balance=0)
             db.session.add(user)
 
+        # Обновляем баланс
         user.balance += amount
         db.session.commit()
 
-        return jsonify({"status": "success", "new_balance": user.balance})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # Обновляем данные в users_db для Telegram-бота
+        users_db[user_id] = {"balance": user.balance}
 
+    return jsonify({
+        "status": "success",
+        "new_balance": user.balance
+    })
 
 
 
