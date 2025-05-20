@@ -142,41 +142,57 @@ async function getStarsPrice(quantity) {
 }
 
 async function initPaymentFlow() {
-    const neededStars = getCartTotal();
-
     try {
-        const response = await tg.sendInvoice({
-            title: "Оплата товаров",
-            description: `Покупка на ${neededStars} звезд`,
-            payload: JSON.stringify(state.cart),
-            currency: "XTR",
-            prices: [{ label: "Итого", amount: neededStars * 100 }] // В копейках
+        const response = await fetch('/api/create-payment-intent', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                amount: getCartTotal(),
+                user_id: state.user.id,
+                cart: state.cart
+            })
         });
 
-        tg.onEvent('invoiceClosed', ({ status }) => {
-            if (status === 'paid') completeOrder();
-            else showAlert('Оплата отменена', 'error');
+        const {clientSecret} = await response.json();
+
+        const stripe = Stripe('pk_test_YOUR_STRIPE_PUBLIC_KEY');
+        const {error} = await stripe.confirmCardPayment(clientSecret, {
+            payment_method: {
+                card: elements.getElement(CardElement)
+            }
         });
+
+        if (error) {
+            showAlert(`Payment error: ${error.message}`, 'error');
+        } else {
+            completeOrder();
+        }
+
     } catch (error) {
         showAlert('Ошибка оплаты: ' + error.message, 'error');
     }
 }
 
-function showPaymentDialog(data) {
+// Добавить форму для карты в payment-dialog
+function showPaymentDialog() {
     const dialogHTML = `
         <div class="payment-dialog">
-            <h3>Оплата ${data.stars} ⭐</h3>
-            <p>Сумма: ${data.tonAmount} TON ($${data.usdAmount})</p>
-            <p>Кошелек для оплаты: <code>${data.wallet}</code></p>
-            <button id="confirm-payment" class="btn btn-success">Я оплатил</button>
+            <h3>Оплата ${getCartTotal()} ⭐</h3>
+            <div id="card-element"></div>
+            <button id="submit-payment" class="btn btn-success mt-3">Оплатить</button>
         </div>
     `;
 
     document.body.insertAdjacentHTML('beforeend', dialogHTML);
 
-    document.getElementById('confirm-payment').addEventListener('click', async () => {
-        await checkPaymentStatus(data.wallet);
-    });
+    const stripe = Stripe('pk_test_YOUR_STRIPE_PUBLIC_KEY');
+    const elements = stripe.elements();
+    const cardElement = elements.create('card');
+    cardElement.mount('#card-element');
+
+    document.getElementById('submit-payment').addEventListener('click', initPaymentFlow);
 }
 
 async function checkPaymentStatus(wallet) {

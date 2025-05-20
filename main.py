@@ -1,3 +1,6 @@
+import os
+import stripe
+from dotenv import load_dotenv
 import logging
 import json
 from flask import Flask, jsonify, request, send_from_directory
@@ -12,6 +15,8 @@ from telegram.ext import (
     CallbackContext,
 )
 
+load_dotenv()
+
 app = Flask(__name__)
 CORS(app)  # Разрешаем CORS
 
@@ -21,6 +26,7 @@ products_db = []
 
 # Конфигурация Telegram
 TOKEN = "7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY"
+stripe.api_key = os.getenv('sk_test_51RQjly304XWcrcFGbB57aWDI2XoYxf0nic2BS1dWgnXMa4qVeM7fLYuaVgbgEIsrayTvldFIlUxF8WjKvGZiAV1q00VnT7g568')
 WEB_APP_URL = "https://telegram-application-gcf2.vercel.app/"
 ADMIN_URL = "https://telegram-application-gcf2.vercel.app/admin.html"
 
@@ -81,6 +87,60 @@ def handle_payment():
 def get_user():
     user_id = request.args.get('user_id')
     return jsonify(users_db.get(user_id, {"balance": 0}))
+
+
+@app.route('/api/create-payment-intent', methods=['POST'])
+def create_payment():
+    try:
+        data = request.json
+        amount = data['amount'] * 100  # Переводим в центы
+
+        payment_intent = stripe.PaymentIntent.create(
+            amount=amount,
+            currency='usd',
+            metadata={
+                "user_id": data['user_id'],
+                "cart": json.dumps(data['cart'])
+            }
+        )
+
+        return jsonify({
+            'clientSecret': payment_intent['client_secret']
+        })
+
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+@app.route('/api/webhook', methods=['POST'])
+def stripe_webhook():
+    payload = request.get_data(as_text=True)
+    sig_header = request.headers.get('Stripe-Signature')
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, os.getenv('STRIPE_WEBHOOK_SECRET')
+        )
+    except ValueError as e:
+        return 'Invalid payload', 400
+    except stripe.error.SignatureVerificationError as e:
+        return 'Invalid signature', 400
+
+    if event['type'] == 'payment_intent.succeeded':
+        payment_intent = event['data']['object']
+        handle_successful_payment(payment_intent)
+
+    return jsonify(success=True)
+
+
+def handle_successful_payment(payment_intent):
+    user_id = payment_intent['metadata']['user_id']
+    cart = json.loads(payment_intent['metadata']['cart'])
+
+    total = sum(item['product']['price'] * item['quantity'] for item in cart)
+
+    if user_id in users_db:
+        users_db[user_id]['balance'] += total
 
 
 @app.route('/api/checkout', methods=['POST'])
