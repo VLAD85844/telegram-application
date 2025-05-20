@@ -2,6 +2,8 @@ import logging
 import json
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+import asyncio
+from quart import Quart, jsonify, request
 from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup, Bot, LabeledPrice
 from telegram.ext import (
     Application,
@@ -32,29 +34,30 @@ def serve_index():
 
 
 @app.route('/api/createInvoice', methods=['POST'])
-def create_invoice():
-    data = request.json
+async def create_invoice():
+    data = await request.json
     user_id = data['userId']
     amount = data['amount']
     description = data['description']
 
     try:
         # Формируем инвойс с нужными параметрами
-        invoice = bot.send_invoice(
+        invoice = await bot.send_invoice(
             chat_id=user_id,  # Отправляем инвойс пользователю
             title="Оплата товаров",  # Название инвойса
             description=description,  # Описание
             payload="some_payload",  # Персонализированная информация о платеже
             provider_token=provider_token,  # Токен платежного провайдера
-            currency="XTR",  # Валюта (если используется Stars API, это будет XTR)
-            prices=[LabeledPrice("Итого", amount * 100)]
-            # Сумма, умноженная на 100 (платежные системы требуют указания суммы в копейках)
+            currency="XTR",  # Валюта
+            prices=[LabeledPrice("Итого", amount * 100)]  # Цена в копейках
         )
 
+        # Теперь инвойс будет содержать атрибут 'url', который можно использовать
         return jsonify({"status": "success", "paymentUrl": invoice.url})
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
+
 
 
 @app.route('/css/<path:filename>')
