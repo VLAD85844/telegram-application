@@ -21,10 +21,14 @@ users_db = {}
 products_db = []
 
 # Конфигурация Telegram
-
+TOKEN = "7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY"
+bot = Bot(token="7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY")
 WEB_APP_URL = "https://telegram-application-gcf2.vercel.app/"
 ADMIN_URL = "https://telegram-application-gcf2.vercel.app/admin.html"
-
+provider_token = "sk_test_51RQjly304XWcrcFGbB57aWDI2XoYxf0nic2BS1dWgnXMa4qVeM7fLYuaVgbgEIsrayTvldFIlUxF8WjKvGZiAV1q00VnT7g568"
+@app.route('/')
+def serve_index():
+    return send_from_directory('static', 'index.html')
 
 
 @app.route('/api/createInvoice', methods=['POST'])
