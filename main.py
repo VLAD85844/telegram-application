@@ -1,6 +1,3 @@
-import os
-import stripe
-from dotenv import load_dotenv
 import logging
 import json
 from flask import Flask, jsonify, request, send_from_directory
@@ -15,10 +12,8 @@ from telegram.ext import (
     CallbackContext,
 )
 
-load_dotenv()
-
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app)  # Разрешаем CORS
 
 # База данных
 users_db = {}
@@ -26,7 +21,6 @@ products_db = []
 
 # Конфигурация Telegram
 TOKEN = "7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY"
-stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 WEB_APP_URL = "https://telegram-application-gcf2.vercel.app/"
 ADMIN_URL = "https://telegram-application-gcf2.vercel.app/admin.html"
 
@@ -86,69 +80,7 @@ def handle_payment():
 @app.route('/api/user')
 def get_user():
     user_id = request.args.get('user_id')
-    if not user_id:
-        return jsonify(error="Missing user_id"), 400
     return jsonify(users_db.get(user_id, {"balance": 0}))
-
-
-@app.route('/api/create-payment-intent', methods=['POST'])
-def create_payment():
-    try:
-        data = request.json
-        if not data or 'amount' not in data:
-            return jsonify(error="Invalid request data"), 400
-        amount = data['amount'] * 100  # Переводим в центы
-
-        payment_intent = stripe.PaymentIntent.create(
-            amount=amount,
-            currency='usd',
-            metadata={
-                "user_id": data['user_id'],
-                "cart": json.dumps(data['cart'])
-            }
-        )
-
-        return jsonify({
-            'clientSecret': payment_intent['client_secret']
-        })
-
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-
-@app.route('/api/webhook', methods=['POST'])
-def stripe_webhook():
-    payload = request.get_data(as_text=True)
-    sig_header = request.headers.get('Stripe-Signature')
-
-    try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, os.getenv('STRIPE_WEBHOOK_SECRET')
-        )
-    except ValueError as e:
-        return 'Invalid payload', 400
-    except stripe.error.SignatureVerificationError as e:
-        return 'Invalid signature', 400
-
-    if event['type'] == 'payment_intent.succeeded':
-        payment_intent = event['data']['object']
-        handle_successful_payment(payment_intent)
-
-    return jsonify(success=True)
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    app.logger.error(f"Server error: {str(e)}")
-    return jsonify(status="error", message="Internal server error"), 500
-
-def handle_successful_payment(payment_intent):
-    user_id = payment_intent['metadata']['user_id']
-    cart = json.loads(payment_intent['metadata']['cart'])
-
-    total = sum(item['product']['price'] * item['quantity'] for item in cart)
-
-    if user_id in users_db:
-        users_db[user_id]['balance'] += total
 
 
 @app.route('/api/checkout', methods=['POST'])

@@ -141,58 +141,67 @@ async function getStarsPrice(quantity) {
     }
 }
 
-let stripe;
-let elements;
-
-async function initStripe() {
-    stripe = Stripe('pk_test_YOUR_STRIPE_PUBLIC_KEY');
-    elements = stripe.elements();
-    const cardElement = elements.create('card');
-    cardElement.mount('#card-element');
-}
-
 async function initPaymentFlow() {
-    showPaymentDialog(); // Показываем форму оплаты
+    const neededStars = getCartTotal();
 
     try {
-        const response = await fetch('/api/create-payment-intent', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                amount: getCartTotal(),
-                user_id: state.user.id,
-                cart: state.cart
-            })
+        const response = await tg.sendInvoice({
+            title: "Оплата товаров",
+            description: `Покупка на ${neededStars} звезд`,
+            payload: JSON.stringify(state.cart),
+            currency: "XTR",
+            prices: [{ label: "Итого", amount: neededStars * 100 }] // В копейках
         });
 
-        const {clientSecret} = await response.json();
-
-        const {error} = await stripe.confirmCardPayment(clientSecret, {
-            payment_method: {card: elements.getElement('card')}
+        tg.onEvent('invoiceClosed', ({ status }) => {
+            if (status === 'paid') completeOrder();
+            else showAlert('Оплата отменена', 'error');
         });
-
-        if (error) {
-            showAlert(`Ошибка оплаты: ${error.message}`, 'error');
-        } else {
-            completeOrder();
-        }
     } catch (error) {
-        showAlert('Ошибка: ' + error.message, 'error');
+        showAlert('Ошибка оплаты: ' + error.message, 'error');
     }
 }
 
-// Обновленная функция показа диалога
-function showPaymentDialog() {
+async function checkout() {
+    const user_id = state.user.id;
+    const cart = state.cart;
+
+    const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            user_id: user_id,
+            cart: cart
+        })
+    });
+
+    const result = await response.json();
+    if (result.status === 'success') {
+        alert('Оплата успешна! Ваш новый баланс: ' + result.new_balance + ' ⭐');
+        state.cart = []; // Очищаем корзину
+        updateUI(); // Обновляем интерфейс
+    } else {
+        alert('Ошибка: ' + result.message);
+    }
+}
+
+function showPaymentDialog(data) {
     const dialogHTML = `
         <div class="payment-dialog">
-            <h3>Оплата ${getCartTotal()} ⭐</h3>
-            <div id="card-element"></div>
-            <button id="submit-payment" class="btn btn-success mt-3">Оплатить</button>
+            <h3>Оплата ${data.stars} ⭐</h3>
+            <p>Сумма: ${data.tonAmount} TON ($${data.usdAmount})</p>
+            <p>Кошелек для оплаты: <code>${data.wallet}</code></p>
+            <button id="confirm-payment" class="btn btn-success">Я оплатил</button>
         </div>
     `;
 
     document.body.insertAdjacentHTML('beforeend', dialogHTML);
-    initStripe();
+
+    document.getElementById('confirm-payment').addEventListener('click', async () => {
+        await checkPaymentStatus(data.wallet);
+    });
 }
 
 async function checkPaymentStatus(wallet) {
@@ -236,6 +245,7 @@ function updateUI() {
     elements.checkoutBtn.disabled = state.cart.length === 0;
 }
 
+
 function renderCartItems() {
     elements.cartItems.innerHTML = state.cart.length === 0
         ? '<p class="text-muted">Корзина пуста</p>'
@@ -247,46 +257,13 @@ function renderCartItems() {
                         <small class="text-muted">${item.product.price} ⭐ × ${item.quantity} = ${item.product.price * item.quantity} ⭐</small>
                     </div>
                     <div class="d-flex align-items-center">
-                        <div class="input-group input-group-sm me-2" style="width: 100px;">
-                            <button class="btn btn-outline-secondary minus-btn">-</button>
-                            <input type="number" class="form-control text-center quantity-input" value="${item.quantity}" min="1">
-                            <button class="btn btn-outline-secondary plus-btn">+</button>
-                        </div>
                         <button class="btn btn-sm btn-outline-danger remove-btn">✕</button>
                     </div>
                 </div>
             </div>
         `).join('');
-
-    // Добавляем обработчики для кнопок минус, плюс и удалить
-    document.querySelectorAll('.minus-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const productId = parseInt(e.target.closest('.cart-item').dataset.id);
-            updateCartItemQuantity(productId, parseInt(e.target.nextElementSibling.value) - 1);
-        });
-    });
-
-    document.querySelectorAll('.plus-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const productId = parseInt(e.target.closest('.cart-item').dataset.id);
-            updateCartItemQuantity(productId, parseInt(e.target.previousElementSibling.value) + 1);
-        });
-    });
-
-    document.querySelectorAll('.remove-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const productId = parseInt(e.target.closest('.cart-item').dataset.id);
-            removeFromCart(productId);
-        });
-    });
-
-    document.querySelectorAll('.quantity-input').forEach(input => {
-        input.addEventListener('change', (e) => {
-            const productId = parseInt(e.target.closest('.cart-item').dataset.id);
-            updateCartItemQuantity(productId, parseInt(e.target.value));
-        });
-    });
 }
+
 
 // Обработчики событий
 function setupEventListeners() {
