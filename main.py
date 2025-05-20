@@ -1,5 +1,6 @@
 import logging
 import json
+import requests
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
@@ -61,6 +62,68 @@ def add_product():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
 
+
+@app.route('/api/create-payment', methods=['POST'])
+def create_payment():
+    try:
+        data = request.json
+        amount = data['amount']
+
+        # Конфигурация Paymaster
+        PAYMASTER_TOKEN = "1744374395:TEST:3383c06662f262f845b7"
+        PAYMASTER_URL = "https://paymaster.ru/api/v1/payments"
+
+        # Создаем платеж в Paymaster
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {PAYMASTER_TOKEN}"
+        }
+
+        payload = {
+            "amount": {
+                "value": f"{amount}.00",
+                "currency": "RUB"
+            },
+            "description": f"Покупка на {amount} звезд",
+            "metadata": {
+                "user_id": data.get('user_id'),
+                "cart": json.dumps(data.get('cart'))
+            },
+            "confirmation": {
+                "type": "redirect",
+                "return_url": f"{WEB_APP_URL}/success.html"
+            }
+        }
+
+        response = requests.post(PAYMASTER_URL, json=payload, headers=headers)
+        return jsonify(response.json())
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/check-payment/<payment_id>')
+def check_payment(payment_id):
+    PAYMASTER_URL = f"https://paymaster.ru/api/v1/payments/{payment_id}"
+    PAYMASTER_TOKEN = "1744374395:TEST:3383c06662f262f845b7"
+    headers = {
+        "Authorization": f"Bearer {PAYMASTER_TOKEN}"
+    }
+
+    response = requests.get(PAYMASTER_URL, headers=headers)
+    payment_status = response.json().get('status')
+
+    if payment_status == 'succeeded':
+        # Обновляем баланс пользователя
+        user_id = response.json().get('metadata', {}).get('user_id')
+        if user_id and user_id in users_db:
+            total = sum(item['price'] * item['quantity']
+                        for item in json.loads(response.json().get('metadata', {}).get('cart', '[]')))
+            users_db[user_id]['balance'] -= total
+
+    return jsonify(payment_status)
+
+
 @app.route('/api/products/<int:product_id>', methods=['DELETE'])
 def delete_product(product_id):
     global products_db
@@ -103,7 +166,9 @@ def checkout():
 # Telegram Bot Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    users_db[str(user.id)] = {"balance": 1000}  # Инициализация баланса для пользователя
+    user_id = str(user.id)
+    if user_id not in users_db:
+        users_db[user_id] = {"balance": 1000, "id": user_id}
 
     # Создаем клавиатуру с двумя кнопками: для магазина и админки
     keyboard = InlineKeyboardMarkup([
