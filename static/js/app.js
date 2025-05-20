@@ -2,8 +2,10 @@
 const tg = window.Telegram.WebApp;
 tg.expand();
 
+
 // Конфигурация API
 const STARS_API = "http://139.99.39.26:6555/api";
+
 
 // Состояние приложения
 let state = {
@@ -12,6 +14,7 @@ let state = {
     user: null,
     balance: 0
 };
+
 
 // DOM элементы
 const elements = {
@@ -27,6 +30,7 @@ const elements = {
     categoryButtons: document.querySelectorAll('[data-category]')
 };
 
+
 // Инициализация приложения
 async function initApp() {
     await loadUserData();
@@ -36,16 +40,19 @@ async function initApp() {
     setupEventListeners();
 }
 
+
 // Загрузка данных пользователя
 async function loadUserData() {
     try {
-        const response = await fetch(`/api/user?user_id=${state.user.id}`);
+        const response = await fetch(`/api/user?user_id=${tg.initDataUnsafe.user.id}`);
         const data = await response.json();
-        state.balance = data.balance;
+        state.balance = data.balance;  // Обновляем баланс
+        updateUI();  // Обновляем интерфейс
     } catch (error) {
         console.error('Ошибка загрузки данных:', error);
     }
 }
+
 
 // Загрузка товаров
 async function loadProducts() {
@@ -57,6 +64,7 @@ async function loadProducts() {
         console.error('Ошибка загрузки товаров:', error);
     }
 }
+
 
 // Отображение товаров
 function renderProducts(products) {
@@ -87,9 +95,11 @@ function loadCart() {
     if (savedCart) state.cart = JSON.parse(savedCart);
 }
 
+
 function saveCart() {
     localStorage.setItem('marketplace_cart', JSON.stringify(state.cart));
 }
+
 
 function addToCart(productId) {
     const product = state.products.find(p => p.id === productId);
@@ -103,12 +113,14 @@ function addToCart(productId) {
     showAlert(`"${product.name}" добавлен в корзину`);
 }
 
+
 // Удаление товара из корзины
 function removeFromCart(productId) {
     state.cart = state.cart.filter(item => item.product.id !== productId);
     saveCart();
     updateUI();
 }
+
 
 // Обновление количества товара в корзине
 function updateCartItemQuantity(productId, newQuantity) {
@@ -119,6 +131,7 @@ function updateCartItemQuantity(productId, newQuantity) {
         updateUI();
     }
 }
+
 
 // Платежная система
 async function generateWallet() {
@@ -131,6 +144,7 @@ async function generateWallet() {
     }
 }
 
+
 async function getStarsPrice(quantity) {
     try {
         const response = await fetch(`${STARS_API}/stars/price/${quantity}`);
@@ -140,6 +154,7 @@ async function getStarsPrice(quantity) {
         return null;
     }
 }
+
 
 async function initPaymentFlow() {
     const neededStars = getCartTotal();
@@ -162,6 +177,7 @@ async function initPaymentFlow() {
     }
 }
 
+
 function showPaymentDialog(data) {
     const dialogHTML = `
         <div class="payment-dialog">
@@ -178,6 +194,7 @@ function showPaymentDialog(data) {
         await checkPaymentStatus(data.wallet);
     });
 }
+
 
 async function checkPaymentStatus(wallet) {
     try {
@@ -199,6 +216,7 @@ async function checkPaymentStatus(wallet) {
     }
 }
 
+
 function completeOrder() {
     state.cart = [];
     saveCart();
@@ -207,10 +225,12 @@ function completeOrder() {
     tg.close();
 }
 
+
 // Обновление интерфейса
 function getCartTotal() {
     return state.cart.reduce((total, item) => total + (item.product.price * item.quantity), 0);
 }
+
 
 function updateUI() {
     elements.starsCount.textContent = state.balance;
@@ -219,6 +239,7 @@ function updateUI() {
     elements.cartTotal.textContent = `${getCartTotal()} ⭐`;
     elements.checkoutBtn.disabled = state.cart.length === 0;
 }
+
 
 function renderCartItems() {
     elements.cartItems.innerHTML = state.cart.length === 0
@@ -272,6 +293,30 @@ function renderCartItems() {
     });
 }
 
+
+document.getElementById('balance-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = Object.fromEntries(new FormData(e.target));
+
+    try {
+        const response = await fetch('/api/user/deposit', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                user_id: formData.user_id,
+                amount: formData.action === 'deposit' ? +formData.amount : -formData.amount,
+                admin: 'admin_panel'
+            })
+        });
+
+        const result = await response.json();
+        showMessage(result, `Баланс успешно изменен. Новый баланс: ${result.new_balance}`);
+    } catch (error) {
+        showMessage({status: 'error', message: error.message});
+    }
+});
+
+
 // Обработчики событий
 function setupEventListeners() {
     document.addEventListener('click', (e) => {
@@ -300,15 +345,19 @@ function setupEventListeners() {
     tg.onEvent('viewportChanged', () => tg.isExpanded && tg.enableClosingConfirmation());
 }
 
+
 // Вспомогательные функции
 function toggleCart(show) {
     elements.cartSidebar.classList.toggle('open', show);
     document.body.classList.toggle('no-scroll', show);
 }
 
+
 function showAlert(message, type = 'success') {
     alert(`[${type.toUpperCase()}] ${message}`);
 }
 
+
 // Запуск приложения
 document.addEventListener('DOMContentLoaded', initApp);
+document.addEventListener('DOMContentLoaded', loadUserData);

@@ -23,5 +23,8 @@
       "src": "/(.*)",
       "dest": "static/$1"
     }
-  ]
+  ],
+  "env": {
+    "SQLALCHEMY_DATABASE_URI": "sqlite:////tmp/marketplace.db"
+  }
 }

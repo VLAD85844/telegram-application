@@ -3,20 +3,22 @@
 <head>
     <title>Админ-панель</title>
     <link rel="stylesheet" href="/css/styles.css">
+    <!-- Добавляем Bootstrap для стилей -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
     <div class="admin-panel">
         <h2>Добавить товар</h2>
         <form id="product-form">
-            <input type="text" name="name" placeholder="Название" required>
-            <input type="number" name="price" placeholder="Цена в звездах" required>
-            <textarea name="description" placeholder="Описание"></textarea>
-            <select name="category" class="form-select mb-3">
+            <input type="text" name="name" placeholder="Название" required class="form-control mb-2">
+            <input type="number" name="price" placeholder="Цена в звездах" required class="form-control mb-2">
+            <textarea name="description" placeholder="Описание" class="form-control mb-2"></textarea>
+            <select name="category" class="form-select mb-2">
                 <option value="popular">Популярные</option>
                 <option value="new">Новинки</option>
             </select>
-            <input type="url" name="image" placeholder="URL изображения" required>
-            <button type="submit">Добавить товар</button>
+            <input type="url" name="image" placeholder="URL изображения" required class="form-control mb-2">
+            <button type="submit" class="btn btn-primary">Добавить товар</button>
         </form>
         <div id="message"></div>
 
@@ -24,7 +26,23 @@
             <h3>Список товаров</h3>
             <div id="products-list"></div>
         </div>
+
+        <div class="balance-management mt-4">
+            <h3>Управление балансом</h3>
+            <form id="balance-form">
+                <input type="text" name="user_id" placeholder="ID пользователя" required class="form-control mb-2">
+                <input type="number" name="amount" placeholder="Сумма" required class="form-control mb-2">
+                <select name="action" required class="form-select mb-2">
+                    <option value="deposit">Пополнить</option>
+                    <option value="withdraw">Списать</option>
+                </select>
+                <button type="submit" class="btn btn-primary">Применить</button>
+            </form>
+        </div>
     </div>
+
+    <!-- Добавляем Bootstrap JS для работы некоторых компонентов -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
         // Объединенный код для управления товарами
@@ -44,38 +62,80 @@
 
                 const result = await response.json();
                 showMessage(result, 'Товар успешно добавлен!');
-                result.status === 'success' && (e.target.reset(), loadProducts());
+                if (result.status === 'success') {
+                    e.target.reset();
+                    loadProducts();
+                }
             } catch (error) {
                 showMessage({status: 'error', message: error.message});
             }
         });
 
         async function loadProducts() {
-            const response = await fetch('/api/products');
-            const products = await response.json();
-            productsList.innerHTML = products.map(p => `
-                <div class="product-item mb-3">
-                    <div>${p.name} (${p.price} ⭐)</div>
-                    <button onclick="deleteProduct(${p.id})" class="btn btn-sm btn-danger">Удалить</button>
-                </div>
-            `).join('');
+            try {
+                const response = await fetch('/api/products');
+                const products = await response.json();
+                productsList.innerHTML = products.map(p => `
+                    <div class="product-item mb-3 p-3 border rounded">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>${p.name}</strong> (${p.price} ⭐)
+                                <div class="text-muted">${p.description}</div>
+                            </div>
+                            <button onclick="deleteProduct(${p.id})" class="btn btn-sm btn-danger">Удалить</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                showMessage({status: 'error', message: 'Ошибка загрузки товаров'});
+            }
         }
 
         async function deleteProduct(id) {
-            await fetch(`/api/products/${id}`, {method: 'DELETE'});
-            const cart = JSON.parse(localStorage.getItem('marketplace_cart')) || [];
-            localStorage.setItem('marketplace_cart', JSON.stringify(cart.filter(item => item.product.id !== id)));
-            loadProducts();
+            try {
+                await fetch(`/api/products/${id}`, {method: 'DELETE'});
+                loadProducts();
+                showMessage({status: 'success'}, 'Товар успешно удален');
+            } catch (error) {
+                showMessage({status: 'error', message: error.message});
+            }
         }
 
         function showMessage({status, message}, successText) {
-            document.getElementById('message').innerHTML = `
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = `
                 <div class="alert alert-${status} mt-3">
                     ${status === 'success' ? successText : `Ошибка: ${message}`}
                 </div>
             `;
+            setTimeout(() => messageDiv.innerHTML = '', 5000);
         }
 
+        // Управление балансом
+        document.getElementById('balance-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = Object.fromEntries(new FormData(e.target));
+
+            try {
+                const response = await fetch('/api/user/deposit', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        user_id: formData.user_id,
+                        amount: formData.action === 'deposit' ? +formData.amount : -formData.amount,
+                        admin: 'admin_panel'
+                    })
+                });
+
+                const result = await response.json();
+                showMessage(result, `Баланс успешно изменен. Новый баланс: ${result.new_balance}`);
+                e.target.reset();
+            } catch (error) {
+                showMessage({status: 'error', message: error.message});
+            }
+        });
+
+        // Загружаем товары при загрузке страницы
         loadProducts();
     </script>
 </body>
