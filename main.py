@@ -3,6 +3,7 @@ from flask_cors import CORS
 from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes
 import os
+import threading
 
 app = Flask(__name__)
 CORS(app)
@@ -85,5 +86,14 @@ def run_bot():
     application.run_polling()
 
 
+def run_flask():
+    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Запускаем Flask в отдельном потоке
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
+
+    # Запускаем бота в основном потоке
+    run_bot()
