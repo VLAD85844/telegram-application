@@ -2,9 +2,7 @@ import logging
 import json
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
-import asyncio
-from quart import Quart, jsonify, request
-from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup, Bot, LabeledPrice
+from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -12,7 +10,6 @@ from telegram.ext import (
     MessageHandler,
     filters,
     CallbackContext,
-    Updater,
 )
 
 app = Flask(__name__)
@@ -24,42 +21,12 @@ products_db = []
 
 # Конфигурация Telegram
 TOKEN = "7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY"
-bot = Bot(token="7978464693:AAHfahvoHcalAmK17Op05OVY-2o8IMbXLxY")
 WEB_APP_URL = "https://telegram-application-gcf2.vercel.app/"
 ADMIN_URL = "https://telegram-application-gcf2.vercel.app/admin.html"
-provider_token = "sk_test_51RQjly304XWcrcFGbB57aWDI2XoYxf0nic2BS1dWgnXMa4qVeM7fLYuaVgbgEIsrayTvldFIlUxF8WjKvGZiAV1q00VnT7g568"
+
 @app.route('/')
 def serve_index():
     return send_from_directory('static', 'index.html')
-
-
-@app.route('/api/createInvoice', methods=['POST'])
-def create_invoice():
-    data = request.get_json()
-    user_id = data['userId']
-    amount = data['amount']
-    description = data['description']
-
-    try:
-        # Создаем инвойс синхронно
-        invoice_url = bot.send_invoice(
-            chat_id=user_id,
-            title="Оплата товаров",
-            description=description,
-            payload="payload",
-            provider_token=provider_token,
-            currency="XTR",
-            prices=[LabeledPrice(label="Итого", amount=amount * 100)]
-        ).invoice_link  # Получаем прямую ссылку на оплату
-
-        return jsonify({
-            "status": "success",
-            "paymentUrl": invoice_url
-        }), 200
-
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
-
 
 
 @app.route('/css/<path:filename>')
@@ -78,29 +45,19 @@ def index():
 def admin_panel():
     return send_from_directory('static', 'admin.html')
 
-@app.route('/webhook', methods=['POST'])
-def handle_payment_confirmation():
-    data = request.json
-    # Проверьте статус платежа и выполните необходимые действия (например, обновление баланса)
-    if data['status'] == 'paid':
-        # Завершаем заказ, обновляем баланс и т.д.
-        return jsonify({"status": "success"})
-    return jsonify({"status": "error", "message": "Payment failed"}), 400
-
 @app.route('/api/products', methods=['POST'])
 def add_product():
     try:
-        data = request.get_json()  # Правильное получение данных
         new_product = {
             "id": len(products_db) + 1,
-            "name": data['name'],
-            "price": int(data['price']),
-            "description": data.get('description', ''),
-            "category": data.get('category', 'popular'),
-            "image": data.get('image', '')
+            "name": request.json['name'],
+            "price": int(request.json['price']),
+            "description": request.json.get('description', ''),
+            "category": request.json.get('category', 'popular'),
+            "image": request.json.get('image', '')
         }
         products_db.append(new_product)
-        return jsonify({"status": "success", "product": new_product}), 201
+        return jsonify({"status": "success", "product": new_product})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
 
@@ -114,19 +71,11 @@ def delete_product(product_id):
 def get_products():
     return jsonify(products_db)
 
-
 @app.route('/api/payment', methods=['POST'])
 def handle_payment():
     data = request.json
-    user_id = data['user_id']
-    amount = data['amount']
-
-    # Обновляем баланс пользователя
-    if user_id in users_db:
-        users_db[user_id]['balance'] -= amount
-        return jsonify({"status": "success"})
-
-    return jsonify({"status": "error", "message": "User not found"}), 404
+    # Логика проверки платежа через Telegram API
+    return jsonify({"status": "success"})
 
 @app.route('/api/user')
 def get_user():

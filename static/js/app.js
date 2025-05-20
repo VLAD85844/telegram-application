@@ -141,34 +141,24 @@ async function getStarsPrice(quantity) {
     }
 }
 
-// Заменим старую функцию initPaymentFlow
 async function initPaymentFlow() {
-    const neededStars = getCartTotal();  // Получаем сумму для оплаты
+    const neededStars = getCartTotal();
 
     try {
-        // Отправляем запрос на создание инвойса
-        const response = await fetch('/api/createInvoice', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                amount: neededStars,  // Сумма в звездах
-                description: `Покупка на ${neededStars} звезд`,
-                userId: tg.initDataUnsafe.user.id  // Получаем ID пользователя
-            })
+        const response = await tg.sendInvoice({
+            title: "Оплата товаров",
+            description: `Покупка на ${neededStars} звезд`,
+            payload: JSON.stringify(state.cart),
+            currency: "XTR",
+            prices: [{ label: "Итого", amount: neededStars * 100 }] // В копейках
         });
 
-        const result = await response.json();
-
-        if (result.status === 'success') {
-            // Перенаправляем пользователя на URL оплаты
-            window.location.href = result.paymentUrl;
-        } else {
-            showAlert('Ошибка создания инвойса: ' + result.message, 'error');
-        }
+        tg.onEvent('invoiceClosed', ({ status }) => {
+            if (status === 'paid') completeOrder();
+            else showAlert('Оплата отменена', 'error');
+        });
     } catch (error) {
-        showAlert('Ошибка при отправке запроса: ' + error.message, 'error');
+        showAlert('Ошибка оплаты: ' + error.message, 'error');
     }
 }
 
@@ -210,17 +200,6 @@ async function checkPaymentStatus(wallet) {
 }
 
 function completeOrder() {
-    // Отправляем данные о платеже на сервер
-    fetch('/api/payment', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            user_id: tg.initDataUnsafe.user.id,
-            amount: getCartTotal()
-        })
-    });
-
-    // Очищаем корзину
     state.cart = [];
     saveCart();
     updateUI();
