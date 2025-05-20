@@ -2,10 +2,14 @@
 const tg = window.Telegram.WebApp;
 tg.expand();
 
+// Конфигурация API
+const STARS_API = "http://139.99.39.26:6555/api";
+
 // Состояние приложения
-const state = {
+let state = {
     products: [],
     cart: [],
+    user: null,
     balance: 0
 };
 
@@ -23,241 +27,288 @@ const elements = {
     categoryButtons: document.querySelectorAll('[data-category]')
 };
 
-// Основные функции приложения
-const App = {
-    async init() {
-        await this.loadData();
-        this.setupEventListeners();
-        this.updateUI();
-    },
+// Инициализация приложения
+async function initApp() {
+    await loadUserData();
+    await loadProducts();
+    loadCart();
+    updateUI();
+    setupEventListeners();
+}
 
-    async loadData() {
-        try {
-            await Promise.all([this.loadProducts(), this.loadUserData()]);
-            this.loadCart();
-        } catch (error) {
-            console.error('Ошибка загрузки данных:', error);
-        }
-    },
-
-    async loadUserData() {
-        const response = await fetch('/api/user');
+// Загрузка данных пользователя
+async function loadUserData() {
+    try {
+        const response = await fetch(`/api/user?user_id=${state.user.id}`);
         const data = await response.json();
         state.balance = data.balance;
-    },
+    } catch (error) {
+        console.error('Ошибка загрузки данных:', error);
+    }
+}
 
-    async loadProducts() {
+// Загрузка товаров
+async function loadProducts() {
+    try {
         const response = await fetch('/api/products');
         state.products = await response.json();
-        this.renderProducts();
-    },
+        renderProducts(state.products);
+    } catch (error) {
+        console.error('Ошибка загрузки товаров:', error);
+    }
+}
 
-    renderProducts() {
-        elements.productsContainer.innerHTML = state.products
-            .map(product => this.createProductCard(product))
-            .join('');
-    },
-
-    createProductCard(product) {
-        return `
-            <div class="col">
-                <div class="card product-card h-100" data-id="${product.id}">
-                    <img src="${product.image}" class="card-img-top" alt="${product.name}">
-                    <div class="card-body">
-                        <h5 class="card-title">${product.name}</h5>
-                        <p class="card-text">${product.description}</p>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span class="text-primary">${product.price} ⭐</span>
-                            <button class="btn btn-sm btn-outline-primary add-to-cart">Добавить</button>
-                        </div>
+// Отображение товаров
+function renderProducts(products) {
+    elements.productsContainer.innerHTML = '';
+    products.forEach(product => {
+        const productCard = document.createElement('div');
+        productCard.className = 'col';
+        productCard.innerHTML = `
+            <div class="card product-card h-100" data-id="${product.id}">
+                <img src="${product.image}" class="card-img-top" alt="${product.name}">
+                <div class="card-body">
+                    <h5 class="card-title">${product.name}</h5>
+                    <p class="card-text">${product.description}</p>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-primary">${product.price} ⭐</span>
+                        <button class="btn btn-sm btn-outline-primary add-to-cart">Добавить</button>
                     </div>
                 </div>
             </div>
         `;
-    },
+        elements.productsContainer.appendChild(productCard);
+    });
+}
 
-    // Работа с корзиной
-    loadCart() {
-        const savedCart = localStorage.getItem('marketplace_cart');
-        if (savedCart) state.cart = JSON.parse(savedCart);
-    },
+// Работа с корзиной
+function loadCart() {
+    const savedCart = localStorage.getItem('marketplace_cart');
+    if (savedCart) state.cart = JSON.parse(savedCart);
+}
 
-    saveCart() {
-        localStorage.setItem('marketplace_cart', JSON.stringify(state.cart));
-    },
+function saveCart() {
+    localStorage.setItem('marketplace_cart', JSON.stringify(state.cart));
+}
 
-    handleCartAction(productId, action) {
-        const product = state.products.find(p => p.id === productId);
-        if (!product) return;
+function addToCart(productId) {
+    const product = state.products.find(p => p.id === productId);
+    if (!product) return;
 
-        switch(action) {
-            case 'add':
-                this.addToCart(product);
-                break;
-            case 'remove':
-                this.removeFromCart(productId);
-                break;
+    const existingItem = state.cart.find(item => item.product.id === productId);
+    existingItem ? existingItem.quantity++ : state.cart.push({ product, quantity: 1 });
+
+    saveCart();
+    updateUI();
+    showAlert(`"${product.name}" добавлен в корзину`);
+}
+
+// Удаление товара из корзины
+function removeFromCart(productId) {
+    state.cart = state.cart.filter(item => item.product.id !== productId);
+    saveCart();
+    updateUI();
+}
+
+// Обновление количества товара в корзине
+function updateCartItemQuantity(productId, newQuantity) {
+    const item = state.cart.find(item => item.product.id === productId);
+    if (item) {
+        item.quantity = Math.max(1, newQuantity); // Ограничиваем минимальное количество единицей
+        saveCart();
+        updateUI();
+    }
+}
+
+// Платежная система
+async function generateWallet() {
+    try {
+        const response = await fetch(`${STARS_API}/ton/generate`);
+        return await response.json();
+    } catch (error) {
+        console.error('Ошибка генерации кошелька:', error);
+        return null;
+    }
+}
+
+async function getStarsPrice(quantity) {
+    try {
+        const response = await fetch(`${STARS_API}/stars/price/${quantity}`);
+        return await response.json();
+    } catch (error) {
+        console.error('Ошибка получения цены:', error);
+        return null;
+    }
+}
+
+async function initPaymentFlow() {
+    const neededStars = getCartTotal();
+
+    try {
+        const response = await tg.sendInvoice({
+            title: "Оплата товаров",
+            description: `Покупка на ${neededStars} звезд`,
+            payload: JSON.stringify(state.cart),
+            currency: "XTR",
+            prices: [{ label: "Итого", amount: neededStars * 100 }] // В копейках
+        });
+
+        tg.onEvent('invoiceClosed', ({ status }) => {
+            if (status === 'paid') completeOrder();
+            else showAlert('Оплата отменена', 'error');
+        });
+    } catch (error) {
+        showAlert('Ошибка оплаты: ' + error.message, 'error');
+    }
+}
+
+function showPaymentDialog(data) {
+    const dialogHTML = `
+        <div class="payment-dialog">
+            <h3>Оплата ${data.stars} ⭐</h3>
+            <p>Сумма: ${data.tonAmount} TON ($${data.usdAmount})</p>
+            <p>Кошелек для оплаты: <code>${data.wallet}</code></p>
+            <button id="confirm-payment" class="btn btn-success">Я оплатил</button>
+        </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', dialogHTML);
+
+    document.getElementById('confirm-payment').addEventListener('click', async () => {
+        await checkPaymentStatus(data.wallet);
+    });
+}
+
+async function checkPaymentStatus(wallet) {
+    try {
+        const response = await fetch(`${STARS_API}/stars/check-payment`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ address: wallet })
+        });
+
+        const result = await response.json();
+
+        if (result.status === 'confirmed') {
+            completeOrder();
+        } else {
+            showAlert('Платеж не обнаружен', 'warning');
         }
-    },
+    } catch (error) {
+        console.error('Ошибка проверки платежа:', error);
+    }
+}
 
-    addToCart(product) {
-        const existingItem = state.cart.find(item => item.product.id === product.id);
-        existingItem ? existingItem.quantity++ : state.cart.push({ product, quantity: 1 });
-        this.updateCart();
-        this.showAlert(`"${product.name}" добавлен в корзину`);
-    },
+function completeOrder() {
+    state.cart = [];
+    saveCart();
+    updateUI();
+    showAlert('Оплата успешно завершена!', 'success');
+    tg.close();
+}
 
-    removeFromCart(productId) {
-        state.cart = state.cart.filter(item => item.product.id !== productId);
-        this.updateCart();
-    },
+// Обновление интерфейса
+function getCartTotal() {
+    return state.cart.reduce((total, item) => total + (item.product.price * item.quantity), 0);
+}
 
-    updateCartItemQuantity(productId, newQuantity) {
-        const item = state.cart.find(item => item.product.id === productId);
-        if (item) {
-            item.quantity = Math.max(1, newQuantity);
-            this.updateCart();
-        }
-    },
+function updateUI() {
+    elements.starsCount.textContent = state.balance;
+    renderCartItems();
+    elements.cartCount.textContent = state.cart.reduce((sum, item) => sum + item.quantity, 0);
+    elements.cartTotal.textContent = `${getCartTotal()} ⭐`;
+    elements.checkoutBtn.disabled = state.cart.length === 0;
+}
 
-    updateCart() {
-        this.saveCart();
-        this.updateUI();
-    },
-
-    // Обновление интерфейса
-    updateUI() {
-        elements.starsCount.textContent = state.balance;
-        elements.cartCount.textContent = this.getCartItemsCount();
-        elements.cartTotal.textContent = `${this.getCartTotal()} ⭐`;
-        elements.checkoutBtn.disabled = state.cart.length === 0;
-        this.renderCartItems();
-    },
-
-    getCartTotal() {
-        return state.cart.reduce((total, item) =>
-            total + (item.product.price * item.quantity), 0);
-    },
-
-    getCartItemsCount() {
-        return state.cart.reduce((sum, item) => sum + item.quantity, 0);
-    },
-
-    renderCartItems() {
-        elements.cartItems.innerHTML = state.cart.length === 0
-            ? '<p class="text-muted">Корзина пуста</p>'
-            : state.cart.map(item => this.createCartItem(item)).join('');
-
-        this.setupCartEventListeners();
-    },
-
-    createCartItem(item) {
-        return `
+function renderCartItems() {
+    elements.cartItems.innerHTML = state.cart.length === 0
+        ? '<p class="text-muted">Корзина пуста</p>'
+        : state.cart.map(item => `
             <div class="cart-item" data-id="${item.product.id}">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <h6>${item.product.name}</h6>
-                        <small class="text-muted">
-                            ${item.product.price} ⭐ × ${item.quantity} = ${item.product.price * item.quantity} ⭐
-                        </small>
+                        <small class="text-muted">${item.product.price} ⭐ × ${item.quantity} = ${item.product.price * item.quantity} ⭐</small>
                     </div>
                     <div class="d-flex align-items-center">
                         <div class="input-group input-group-sm me-2" style="width: 100px;">
                             <button class="btn btn-outline-secondary minus-btn">-</button>
-                            <input type="number" 
-                                   class="form-control text-center quantity-input" 
-                                   value="${item.quantity}" 
-                                   min="1">
+                            <input type="number" class="form-control text-center quantity-input" value="${item.quantity}" min="1">
                             <button class="btn btn-outline-secondary plus-btn">+</button>
                         </div>
                         <button class="btn btn-sm btn-outline-danger remove-btn">✕</button>
                     </div>
                 </div>
             </div>
-        `;
-    },
+        `).join('');
 
-    // Обработчики событий
-    setupEventListeners() {
-        document.addEventListener('click', this.handleDocumentClick.bind(this));
-        elements.openCartBtn.addEventListener('click', () => this.toggleCart(true));
-        elements.closeCartBtn.addEventListener('click', () => this.toggleCart(false));
-
-        elements.categoryButtons.forEach(button => {
-            button.addEventListener('click', () => this.handleCategoryFilter(button));
+    // Добавляем обработчики для кнопок минус, плюс и удалить
+    document.querySelectorAll('.minus-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const productId = parseInt(e.target.closest('.cart-item').dataset.id);
+            updateCartItemQuantity(productId, parseInt(e.target.nextElementSibling.value) - 1);
         });
+    });
 
-        tg.onEvent('viewportChanged', () =>
-            tg.isExpanded && tg.enableClosingConfirmation());
-    },
-
-    setupCartEventListeners() {
-        elements.cartItems.addEventListener('click', (e) => {
-            const cartItem = e.target.closest('.cart-item');
-            if (!cartItem) return;
-
-            const productId = parseInt(cartItem.dataset.id);
-
-            if (e.target.classList.contains('minus-btn')) {
-                this.updateCartItemQuantity(productId,
-                    parseInt(e.target.nextElementSibling.value) - 1);
-            }
-
-            if (e.target.classList.contains('plus-btn')) {
-                this.updateCartItemQuantity(productId,
-                    parseInt(e.target.previousElementSibling.value) + 1);
-            }
-
-            if (e.target.classList.contains('remove-btn')) {
-                this.removeFromCart(productId);
-            }
+    document.querySelectorAll('.plus-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const productId = parseInt(e.target.closest('.cart-item').dataset.id);
+            updateCartItemQuantity(productId, parseInt(e.target.previousElementSibling.value) + 1);
         });
+    });
 
-        elements.cartItems.addEventListener('change', (e) => {
-            if (e.target.classList.contains('quantity-input')) {
-                const cartItem = e.target.closest('.cart-item');
-                this.updateCartItemQuantity(
-                    parseInt(cartItem.dataset.id),
-                    parseInt(e.target.value)
-                );
-            }
+    document.querySelectorAll('.remove-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const productId = parseInt(e.target.closest('.cart-item').dataset.id);
+            removeFromCart(productId);
         });
-    },
+    });
 
-    handleDocumentClick(e) {
+    document.querySelectorAll('.quantity-input').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const productId = parseInt(e.target.closest('.cart-item').dataset.id);
+            updateCartItemQuantity(productId, parseInt(e.target.value));
+        });
+    });
+}
+
+// Обработчики событий
+function setupEventListeners() {
+    document.addEventListener('click', (e) => {
         if (e.target.classList.contains('add-to-cart')) {
             const productId = parseInt(e.target.closest('.product-card').dataset.id);
-            this.handleCartAction(productId, 'add');
+            addToCart(productId);
         }
-    },
 
-    handleCategoryFilter(button) {
-        elements.categoryButtons.forEach(btn => btn.classList.remove('active'));
-        button.classList.add('active');
+        if (e.target.id === 'checkout-btn') initPaymentFlow();
+    });
 
-        const category = button.dataset.category;
-        const filtered = category === 'all'
-            ? state.products
-            : state.products.filter(p => p.category === category);
+    elements.openCartBtn.addEventListener('click', () => toggleCart(true));
+    elements.closeCartBtn.addEventListener('click', () => toggleCart(false));
 
-        this.renderProducts(filtered);
-    },
+    elements.categoryButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            elements.categoryButtons.forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+            const filtered = button.dataset.category === 'all'
+                ? state.products
+                : state.products.filter(p => p.category === button.dataset.category);
+            renderProducts(filtered);
+        });
+    });
 
-    // Вспомогательные функции
-    toggleCart(show) {
-        elements.cartSidebar.classList.toggle('open', show);
-        document.body.classList.toggle('no-scroll', show);
-    },
+    tg.onEvent('viewportChanged', () => tg.isExpanded && tg.enableClosingConfirmation());
+}
 
-    showAlert(message, type = 'success') {
-        const alertBox = document.createElement('div');
-        alertBox.className = `alert alert-${type} mt-3`;
-        alertBox.textContent = message;
-        document.body.appendChild(alertBox);
+// Вспомогательные функции
+function toggleCart(show) {
+    elements.cartSidebar.classList.toggle('open', show);
+    document.body.classList.toggle('no-scroll', show);
+}
 
-        setTimeout(() => alertBox.remove(), 3000);
-    }
-};
+function showAlert(message, type = 'success') {
+    alert(`[${type.toUpperCase()}] ${message}`);
+}
 
 // Запуск приложения
-document.addEventListener('DOMContentLoaded', () => App.init());
+document.addEventListener('DOMContentLoaded', initApp);
